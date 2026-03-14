@@ -9,32 +9,19 @@ Outputs a markdown table and optionally a JSON file with detailed results.
 import argparse
 import json
 import os
-import sys
 import time
 
 from generator import generate_scenario
+from scenario_catalog import (
+    BENCHMARK_SCENARIOS,
+    DIAGNOSTIC_SCENARIOS,
+    EXTENDED_REALISTIC_SCENARIOS,
+    ORGANIZER_SCENARIOS,
+)
 from solver.packer import SORT_KEYS
 from validator import evaluate_solution
 from solver.models import Pallet, Box, solution_to_dict
 from solver.solver import solve
-
-
-ORGANIZER_SCENARIOS = [
-    ("heavy_water", 42),
-    ("fragile_tower", 43),
-    ("liquid_tetris", 44),
-    ("random_mixed", 45),
-]
-
-PROJECT_SCENARIOS = [
-    ("exact_fit", 46),
-    ("fragile_mix", 47),
-    ("support_tetris", 48),
-    ("cavity_fill", 49),
-    ("count_preference", 50),
-]
-
-SCENARIOS = ORGANIZER_SCENARIOS + PROJECT_SCENARIOS
 
 
 def _request_to_models(request_dict: dict):
@@ -75,7 +62,7 @@ def run_benchmark(
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
 
-    for scenario_type, seed in SCENARIOS:
+    for scenario_type, seed in BENCHMARK_SCENARIOS:
         request_dict = generate_scenario(
             f"bench_{scenario_type}", scenario_type, seed=seed
         )
@@ -162,11 +149,16 @@ def format_markdown(results: list) -> str:
         return section
 
     organizer_names = {name for name, _ in ORGANIZER_SCENARIOS}
+    extended_names = {name for name, _ in EXTENDED_REALISTIC_SCENARIOS}
+    diagnostic_names = {name for name, _ in DIAGNOSTIC_SCENARIOS}
+
     organizer_results = [r for r in results if r["scenario"] in organizer_names]
-    project_results = [r for r in results if r["scenario"] not in organizer_names]
+    extended_results = [r for r in results if r["scenario"] in extended_names]
+    diagnostic_results = [r for r in results if r["scenario"] in diagnostic_names]
 
     lines.extend(render_table("Сценарии организаторов", organizer_results))
-    lines.extend(render_table("Наши synthetic/diagnostic сценарии", project_results))
+    lines.extend(render_table("Расширенные реалистичные сценарии", extended_results))
+    lines.extend(render_table("Sanity и диагностические сценарии", diagnostic_results))
 
     overall_avg = (
         sum(r["final_score"] for r in results if r["valid"]) / len(results)
