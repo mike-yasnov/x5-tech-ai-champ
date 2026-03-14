@@ -15,23 +15,37 @@ def main():
         prog="python -m solver",
     )
     parser.add_argument(
-        "inputs", nargs="+",
+        "inputs",
+        nargs="+",
         help="Request JSON file(s)",
     )
     parser.add_argument(
-        "-o", "--output", default=None,
+        "-o",
+        "--output",
+        default=None,
         help="Output JSON file (only for single input; for batch, uses response_<name>.json)",
     )
     parser.add_argument(
-        "--restarts", type=int, default=10,
+        "--restarts",
+        type=int,
+        default=10,
         help="Number of restarts (default: 10)",
     )
     parser.add_argument(
-        "--time-budget", type=int, default=900,
+        "--time-budget",
+        type=int,
+        default=900,
         help="Time budget per task in ms (default: 900)",
     )
     parser.add_argument(
-        "--log-level", default="INFO",
+        "--algorithm",
+        default="greedy_restarts",
+        choices=["greedy_restarts", "annealing"],
+        help="Solver algorithm (default: greedy_restarts)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
         choices=["DEBUG", "INFO", "WARN", "WARNING", "ERROR"],
         help="Logging level (default: INFO)",
     )
@@ -58,6 +72,7 @@ def main():
             request_dict=request_dict,
             n_restarts=args.restarts,
             time_budget_ms=args.time_budget,
+            algorithm=args.algorithm,
         )
 
         result = solution_to_dict(solution)
@@ -77,6 +92,7 @@ def main():
         # Print score if validator available
         try:
             from validator import evaluate_solution
+
             eval_result = evaluate_solution(request_dict, result)
             if eval_result.get("valid"):
                 metrics = eval_result.get("metrics", {})

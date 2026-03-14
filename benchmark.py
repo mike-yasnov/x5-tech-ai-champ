@@ -65,7 +65,11 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
+def run_benchmark(
+    n_restarts: int = 10,
+    time_budget_ms: int = 5000,
+    algorithm: str = "greedy_restarts",
+) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
@@ -84,6 +88,7 @@ def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
             request_dict=request_dict,
             n_restarts=n_restarts,
             time_budget_ms=time_budget_ms,
+            algorithm=algorithm,
         )
         wall_time_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -172,8 +177,12 @@ def format_markdown(results: list) -> str:
     lines.append("")
     lines.append("### Constraint Compliance")
     lines.append("")
-    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
-    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
+    lines.append(
+        "| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |"
+    )
+    lines.append(
+        "|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|"
+    )
     for r in results:
         cc = r.get("constraint_checks", {})
         if not r["valid"]:
@@ -253,9 +262,15 @@ def main():
     parser.add_argument(
         "--viz", default=None, help="Generate 3D visualization HTML files to directory"
     )
+    parser.add_argument(
+        "--algorithm",
+        default="greedy_restarts",
+        choices=["greedy_restarts", "annealing"],
+        help="Solver algorithm to benchmark",
+    )
     args = parser.parse_args()
 
-    results = run_benchmark(n_restarts=args.restarts)
+    results = run_benchmark(n_restarts=args.restarts, algorithm=args.algorithm)
     md = format_markdown(results)
     print(md)
 
