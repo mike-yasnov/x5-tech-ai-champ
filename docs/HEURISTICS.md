@@ -160,6 +160,21 @@ There are also randomized variants:
 
 These keep the base ordering but perturb nearby positions in the sorted list. They are useful because greedy 3D packing is highly order-sensitive.
 
+## Optimization Workflow
+
+Current workflow is intentionally split into two modes:
+
+- `solver.solve(...)` uses an adaptive shortlist of strategies and an internal effective budget of about 1 second to maximize leaderboard score via better `time_score`
+- `benchmark_strategies.py` and the full strategy catalog remain available for offline and CI comparison so we can keep exploring a much wider search space
+
+That means we do not throw away heuristic diversity, but we also do not pay the runtime cost of evaluating the full catalog on every production solve.
+
+Run per-strategy comparison with:
+
+```bash
+python benchmark_strategies.py --scenario heavy_water --limit 15
+```
+
 ## Recommended First Candidates
 
 If we later want to prune the search space, the first configs worth comparing are:

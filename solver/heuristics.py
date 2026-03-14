@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 import random
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List
 
 from .models import Box
 
@@ -180,3 +180,104 @@ STRATEGY_CONFIGS.extend(
     )
     for sort_key_name in SORT_KEYS
 )
+
+
+def summarize_request(
+    boxes: List[Box], pallet_volume: int, pallet_max_weight: float
+) -> Dict[str, float]:
+    total_items = sum(box.quantity for box in boxes)
+    total_volume = sum(box.volume * box.quantity for box in boxes)
+    total_weight = sum(box.weight_kg * box.quantity for box in boxes)
+    fragile_items = sum(box.quantity for box in boxes if box.fragile)
+    upright_items = sum(box.quantity for box in boxes if box.strict_upright)
+    non_stackable_items = sum(box.quantity for box in boxes if not box.stackable)
+    repeated_skus = sum(1 for box in boxes if box.quantity >= 4)
+
+    return {
+        "total_items": total_items,
+        "sku_count": len(boxes),
+        "fill_ratio": total_volume / max(1, pallet_volume),
+        "weight_ratio": total_weight / max(1.0, pallet_max_weight),
+        "fragile_ratio": fragile_items / max(1, total_items),
+        "upright_ratio": upright_items / max(1, total_items),
+        "non_stackable_ratio": non_stackable_items / max(1, total_items),
+        "repeated_sku_ratio": repeated_skus / max(1, len(boxes)),
+    }
+
+
+def select_strategy_configs(
+    boxes: List[Box], pallet_volume: int, pallet_max_weight: float
+) -> List[StrategyConfig]:
+    summary = summarize_request(boxes, pallet_volume, pallet_max_weight)
+    by_name = {config.name: config for config in STRATEGY_CONFIGS}
+
+    selected_names = [
+        "volume__balanced",
+        "area__max_support",
+        "weighted_volume__center",
+        "weight__fragile_last",
+    ]
+
+    if summary["fragile_ratio"] >= 0.20:
+        selected_names.extend(
+            [
+                "weight__fragile_last",
+                "stackable__max_support",
+                "area__max_support",
+            ]
+        )
+
+    if summary["upright_ratio"] >= 0.25:
+        selected_names.extend(
+            [
+                "upright__max_support",
+                "constrained__max_support",
+                "layer__min_height",
+            ]
+        )
+
+    if summary["fill_ratio"] >= 0.75:
+        selected_names.extend(
+            [
+                "area__max_contact",
+                "layer__max_support",
+                "smalls_last__max_contact",
+            ]
+        )
+
+    if summary["weight_ratio"] >= 0.55:
+        selected_names.extend(
+            [
+                "weight__center_stable",
+                "density__center_stable",
+                "weighted_volume__center",
+            ]
+        )
+
+    if summary["repeated_sku_ratio"] >= 0.35:
+        selected_names.extend(
+            [
+                "homogeneous__dbfl",
+                "homogeneous__max_support",
+            ]
+        )
+
+    if summary["sku_count"] >= 5:
+        selected_names.extend(
+            [
+                "volume__max_contact",
+                "perimeter__max_contact",
+                "slender__min_height",
+            ]
+        )
+
+    # dedupe while keeping order
+    deduped: List[StrategyConfig] = []
+    seen = set()
+    for name in selected_names:
+        if name in by_name and name not in seen:
+            deduped.append(by_name[name])
+            seen.add(name)
+
+    # keep catalog available, but solver should stay fast by default
+    return deduped[:8]

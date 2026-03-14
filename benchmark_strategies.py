@@ -1,12 +1,13 @@
-"""Compare baseline sort heuristics across generated scenarios."""
+"""Compare individual heuristic strategies across generated scenarios."""
 
 import argparse
 import json
 from typing import Any, Dict, List
 
 from generator import generate_scenario
+from solver.heuristics import STRATEGY_CONFIGS
 from solver.models import Box, Pallet, solution_to_dict
-from solver.packer import SORT_KEYS, pack_greedy
+from solver.packer import pack_greedy
 from validator import evaluate_solution
 
 
@@ -55,12 +56,20 @@ def benchmark_scenario(scenario_name: str, seed: int) -> Dict[str, Any]:
     task_id, pallet, boxes = request_to_models(request_dict)
 
     rows: List[Dict[str, Any]] = []
-    for strategy_name in SORT_KEYS:
-        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=strategy_name)
+    for strategy in STRATEGY_CONFIGS:
+        solution = pack_greedy(
+            task_id,
+            pallet,
+            boxes,
+            sort_key_name=strategy.sort_key_name,
+            placement_policy=strategy.placement_policy,
+            randomized=strategy.randomized,
+            noise_factor=strategy.noise_factor,
+        )
         result = evaluate_solution(request_dict, solution_to_dict(solution))
         rows.append(
             {
-                "strategy": strategy_name,
+                "strategy": strategy.name,
                 "valid": result.get("valid", False),
                 "final_score": result.get("final_score", 0.0),
                 "metrics": result.get("metrics", {}),
@@ -93,7 +102,9 @@ def render_markdown(report: List[Dict[str, Any]], limit: int) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Compare baseline sort heuristics")
+    parser = argparse.ArgumentParser(
+        description="Compare individual heuristic strategies"
+    )
     parser.add_argument(
         "--scenario", choices=[name for name, _ in SCENARIOS] + ["all"], default="all"
     )

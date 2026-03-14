@@ -6,13 +6,15 @@ import time
 from typing import List, Optional
 
 from .models import Box, Pallet, Solution, solution_to_dict
-from .heuristics import STRATEGY_CONFIGS
+from .heuristics import STRATEGY_CONFIGS, StrategyConfig, select_strategy_configs
 from .packer import pack_greedy
 
 # Add project root to path for validator import
 sys.path.insert(0, ".")
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_EFFECTIVE_TIME_BUDGET_MS = 950
 
 
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
@@ -56,19 +58,30 @@ def solve(
     best_solution: Optional[Solution] = None
     best_score: float = -1.0
     best_key: str = ""
-    strategies = STRATEGY_CONFIGS
+    effective_budget_ms = min(time_budget_ms, DEFAULT_EFFECTIVE_TIME_BUDGET_MS)
+    selected_strategies = select_strategy_configs(
+        boxes, pallet.volume, pallet.max_weight_kg
+    )
+    randomized_strategies = [
+        strategy
+        for strategy in STRATEGY_CONFIGS
+        if strategy.randomized
+        and strategy.sort_key_name in {cfg.sort_key_name for cfg in selected_strategies}
+    ]
+    strategies: List[StrategyConfig] = selected_strategies + randomized_strategies
 
     logger.info(
-        "[solve] task=%s restarts=%d budget=%dms strategy_count=%d",
+        "[solve] task=%s restarts=%d budget=%dms effective_budget=%dms strategy_count=%d",
         task_id,
         n_restarts,
         time_budget_ms,
+        effective_budget_ms,
         len(strategies),
     )
 
     for i in range(min(n_restarts, len(strategies))):
         elapsed = (time.perf_counter() - t0) * 1000
-        if elapsed > time_budget_ms * 0.9:
+        if elapsed > effective_budget_ms * 0.92:
             logger.info("[solve] time budget approaching, stopping at restart %d", i)
             break
 
