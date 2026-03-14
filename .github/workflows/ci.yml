@@ -28,9 +28,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Create virtual environment
+        run: |
+          python -m venv .venv
+          ./.venv/bin/pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run unit tests
         run: pytest tests/ -v --tb=short
@@ -49,9 +54,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Create virtual environment
+        run: |
+          python -m venv .venv
+          ./.venv/bin/pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run benchmark
         id: bench
