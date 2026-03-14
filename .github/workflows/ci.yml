@@ -16,15 +16,17 @@ jobs:
     runs-on: [self-hosted, linux, x64, server]
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        include:
+          - python-version: "3.11"
+            container-image: python:3.11-bookworm
+          - python-version: "3.12"
+            container-image: python:3.12-bookworm
+
+    container:
+      image: ${{ matrix.container-image }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -36,6 +38,8 @@ jobs:
     runs-on: [self-hosted, linux, x64, server]
     needs: test
     if: github.event_name == 'pull_request'
+    container:
+      image: python:3.12-bookworm
     permissions:
       contents: read
       issues: write
@@ -43,11 +47,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
