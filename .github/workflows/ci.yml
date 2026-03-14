@@ -67,14 +67,15 @@ jobs:
       - name: Run strategy benchmark
         id: strategy_bench
         run: |
-          python benchmark_strategies.py --limit 8 --output strategy_results.json 2>/dev/null | tee strategy_output.md
+          python benchmark_strategies.py --limit 0 --output strategy_results.json --markdown-output strategy_output_full.md > /dev/null
+          python benchmark_strategies.py --limit 8 --markdown-output strategy_output.md 2>/dev/null | tee strategy_output.md
 
       - name: Add benchmark to job summary
         run: |
           echo "# Solver Benchmark" >> "$GITHUB_STEP_SUMMARY"
           cat benchmark_output.md >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "# Strategy Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          echo "# Strategy Benchmark (Top 8 per scenario)" >> "$GITHUB_STEP_SUMMARY"
           cat strategy_output.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark artifacts
@@ -86,6 +87,7 @@ jobs:
             benchmark_output.md
             strategy_results.json
             strategy_output.md
+            strategy_output_full.md
 
       - name: Post benchmark results to PR
         if: github.event.pull_request.head.repo.full_name == github.repository
@@ -97,18 +99,12 @@ jobs:
             const strategyOutput = fs.readFileSync('strategy_output.md', 'utf8');
             const results = JSON.parse(fs.readFileSync('benchmark_results.json', 'utf8'));
 
-            const avg = results.reduce((s, r) => s + (r.final_score || 0), 0) / results.length;
             const allValid = results.every(r => r.valid);
-
             const status = allValid ? '✅' : '❌';
-
-            // Build artifact link
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const vizSection = `\n\n### 🎨 3D Visualizations\n\nInteractive 3D pallet views available as build artifacts:\n\n📦 [Download visualizations](${runUrl}) → Artifacts → \`3d-pallet-visualizations\`\n\nOpen the HTML files in a browser to rotate, zoom, and inspect placements.`;
+            const body = `### ${status} Benchmark Results\n\n${output}\n\n### Strategy Comparison (Top 8 per scenario)\n\n${strategyOutput}\n\nFull strategy benchmark is attached in CI artifacts as \`strategy_results.json\` and \`strategy_output_full.md\`. ${vizSection}\n\n---\n*Automated benchmark by CI*`;
 
-            const body = `### ${status} Benchmark Results\n\n${output}${vizSection}\n\n---\n*Automated benchmark by CI*`;
-
-            // Find existing comment
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
