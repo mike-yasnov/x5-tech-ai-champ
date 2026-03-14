@@ -309,12 +309,16 @@ def index() -> None:
         weights = clone_data(record.get("score_weights", DEFAULT_SCORE_WEIGHTS))
         weights[key] = float(value)
         updated = service.update_score_weights(record["id"], weights)
+        if state["autorun"]:
+            updated = service.run_experiment(updated["id"])
         state["selected_id"] = updated["id"]
         refresh_all()
 
     def reset_weights() -> None:
         record = current_record()
         updated = service.update_score_weights(record["id"], dict(DEFAULT_SCORE_WEIGHTS))
+        if state["autorun"]:
+            updated = service.run_experiment(updated["id"])
         state["selected_id"] = updated["id"]
         refresh_all()
         ui.notify("Веса score сброшены к дефолтным 50/30/10/10", color="primary")
@@ -846,6 +850,6 @@ if __name__ in {"__main__", "__mp_main__"}:
     uvicorn.run(
         fastapi_app,
         host=os.getenv("HOST", "127.0.0.1"),
-        port=int(os.getenv("PORT", "8080")),
+        port=int(os.getenv("PORT", "3030")),
         reload=False,
     )

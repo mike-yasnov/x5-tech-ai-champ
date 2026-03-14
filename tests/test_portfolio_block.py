@@ -20,6 +20,7 @@ from solver.portfolio_block import (
     _materialize_block_candidate,
     _should_add_legacy_baseline_candidate,
     _should_try_aggressive_fragile_staging,
+    _should_try_upright_layered_candidate,
     _should_try_upright_prefill_staging,
     _should_use_fast_overload_path,
     _should_try_strict_fragility_search,
@@ -249,6 +250,18 @@ def test_upright_prefill_gate_targets_low_volume_upright_nonstackable_mix():
 
     assert _should_try_upright_prefill_staging(liquid) is True
     assert _should_try_upright_prefill_staging(upright_tight) is False
+
+
+def test_upright_layered_gate_is_broader_but_still_targeted():
+    liquid = compute_request_fingerprint(
+        generate_scenario("test_liquid_tetris_layered", "liquid_tetris", seed=44)
+    )
+    compact = compute_request_fingerprint(
+        generate_scenario("test_exact_fit_layered", "exact_fit", seed=46)
+    )
+
+    assert _should_try_upright_layered_candidate(liquid) is True
+    assert _should_try_upright_layered_candidate(compact) is False
 
 
 def test_legacy_greedy_strategy_regression_stays_valid():

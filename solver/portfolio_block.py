@@ -23,7 +23,13 @@ from .hybrid.postprocess import postprocess
 from .hybrid.rotations import get_orientations
 from .hybrid.search import beam_search_solve
 from .models import Box, Pallet
-from .packer import order_boxes, pack_greedy, pack_instance_sequence, pack_ordered_boxes
+from .packer import (
+    order_boxes,
+    pack_greedy,
+    pack_instance_sequence,
+    pack_ordered_boxes,
+    pack_upright_layered,
+)
 from .scenario_selector import (
     SEED_FAMILIES,
     ScenarioFingerprint,
@@ -895,6 +901,23 @@ def _run_greedy_seed_family(
             )
     if seed_family == "liquid_fill":
         fingerprint = compute_request_fingerprint(request)
+        if _should_try_upright_layered_candidate(fingerprint):
+            candidates.append(
+                _policy_run_from_solution(
+                    request=request,
+                    solution=pack_upright_layered(
+                        task_id,
+                        pallet,
+                        boxes,
+                        label=f"{label}:layered",
+                        time_budget_ms=min(140, budget_ms),
+                    ),
+                    total_items=total_items,
+                    name=f"{run_name}:layered",
+                    seed_family=seed_family,
+                    ordered_skus=(),
+                )
+            )
         if _should_try_upright_prefill_staging(fingerprint):
             prefill_instances = _upright_prefill_instances(boxes)
             if prefill_instances:
@@ -926,8 +949,10 @@ def _run_greedy_seed_family(
             time_budget_left_ms=post_budget_ms,
         )
         run.seed_family = seed_family
-        if run.name.startswith(f"{run_name}:staged") or run.name.startswith(
-            f"{run_name}:upright_prefill"
+        if (
+            run.name.startswith(f"{run_name}:staged")
+            or run.name.startswith(f"{run_name}:upright_prefill")
+            or run.name.startswith(f"{run_name}:layered")
         ):
             run.ordered_skus = ()
         elif not run.ordered_skus:
@@ -1044,6 +1069,18 @@ def _should_try_upright_prefill_staging(
         and fingerprint.volume_ratio <= 0.55
         and fingerprint.non_stackable_ratio >= 0.15
         and fingerprint.fragile_ratio <= 0.45
+    )
+
+
+def _should_try_upright_layered_candidate(
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return (
+        fingerprint.total_items <= 120
+        and fingerprint.sku_count <= 4
+        and fingerprint.upright_ratio >= 0.95
+        and fingerprint.non_stackable_ratio >= 0.15
+        and fingerprint.volume_ratio <= 0.65
     )
 
 

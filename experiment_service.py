@@ -315,7 +315,7 @@ class ExperimentService:
     def ensure_default_experiment(self) -> Dict[str, Any]:
         if self._order:
             return self.get_record(self._order[0])
-        scenario_type, seed = BENCHMARK_SCENARIOS[0]
+        scenario_type, seed = ("random_mixed", 45)
         return self.create_experiment_from_scenario(
             scenario_type=scenario_type,
             seed=seed,
