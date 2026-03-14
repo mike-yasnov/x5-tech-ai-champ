@@ -31,6 +31,11 @@ htmlcov/
 # Generated data (request/response JSONs)
 request_*.json
 response_*.json
+benchmark_results.json
+benchmark_output.md
+
+# Visualization output
+viz/
 
 # AI Factory internals
 .ai-factory.json

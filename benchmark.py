@@ -8,6 +8,7 @@ Outputs a markdown table and optionally a JSON file with detailed results.
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -51,7 +52,7 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10) -> list:
+def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 900) -> list:
     results = []
 
     for scenario_type, seed in SCENARIOS:
@@ -65,7 +66,7 @@ def run_benchmark(n_restarts: int = 10) -> list:
             boxes=boxes,
             request_dict=request_dict,
             n_restarts=n_restarts,
-            time_budget_ms=900,
+            time_budget_ms=time_budget_ms,
         )
         wall_time_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -84,6 +85,9 @@ def run_benchmark(n_restarts: int = 10) -> list:
             "solve_time_ms": solution.solve_time_ms,
             "wall_time_ms": wall_time_ms,
             "error": eval_result.get("error"),
+            "response": response_dict,
+            "request_pallet": request_dict["pallet"],
+            "request_boxes": request_dict["boxes"],
         }
         results.append(entry)
 
@@ -125,10 +129,44 @@ def format_markdown(results: list) -> str:
     return "\n".join(lines)
 
 
+def build_viz_data(results: list) -> list:
+    """Extract visualization data from benchmark results."""
+    viz = []
+    for r in results:
+        boxes_meta = {b["sku_id"]: b for b in r.get("request_boxes", [])}
+        placements = []
+        for p in r.get("response", {}).get("placements", []):
+            sku = boxes_meta.get(p["sku_id"], {})
+            dim = p["dimensions_placed"]
+            pos = p["position"]
+            placements.append({
+                "sku_id": p["sku_id"],
+                "x_mm": pos["x_mm"],
+                "y_mm": pos["y_mm"],
+                "z_mm": pos["z_mm"],
+                "length_mm": dim["length_mm"],
+                "width_mm": dim["width_mm"],
+                "height_mm": dim["height_mm"],
+                "fragile": sku.get("fragile", False),
+            })
+        viz.append({
+            "pallet": r.get("request_pallet", {}),
+            "placements": placements,
+            "meta": {
+                "scenario": r["scenario"],
+                "score": r.get("final_score", 0),
+                "placed": r.get("placed", 0),
+                "total_items": r.get("total_items", 0),
+            },
+        })
+    return viz
+
+
 def main():
     parser = argparse.ArgumentParser(description="Benchmark 3D Pallet Packing Solver")
     parser.add_argument("--restarts", type=int, default=10, help="Number of restarts (default: 10)")
     parser.add_argument("--output", "-o", default=None, help="Save detailed results to JSON file")
+    parser.add_argument("--viz", default=None, help="Generate 3D visualization HTML files to directory")
     args = parser.parse_args()
 
     results = run_benchmark(n_restarts=args.restarts)
@@ -136,9 +174,24 @@ def main():
     print(md)
 
     if args.output:
+        # Save results without bulky response/request data
+        slim_results = [
+            {k: v for k, v in r.items() if k not in ("response", "request_pallet", "request_boxes")}
+            for r in results
+        ]
         with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(slim_results, f, indent=2, ensure_ascii=False)
         print(f"\nDetailed results saved to {args.output}")
+
+    if args.viz:
+        from visualize import generate_html_files
+        viz_data = build_viz_data(results)
+        viz_json_path = os.path.join(args.viz, "benchmark_viz.json")
+        os.makedirs(args.viz, exist_ok=True)
+        with open(viz_json_path, "w", encoding="utf-8") as f:
+            json.dump(viz_data, f, ensure_ascii=False)
+        files = generate_html_files(viz_json_path, args.viz)
+        print(f"\nGenerated {len(files)} 3D visualization(s) in {args.viz}/")
 
 
 if __name__ == "__main__":
