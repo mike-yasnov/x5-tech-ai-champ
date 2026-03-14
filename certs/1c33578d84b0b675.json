@@ -1,0 +1,666 @@
+{
+  "request_hash": "1c33578d84b0b675",
+  "task_id": "bench_fragile_mix",
+  "strategy": "exact_reference",
+  "stage": "general_exact_search",
+  "packing_score_lb": 0.8864,
+  "packing_score_ub": 0.8864,
+  "gap": 0.0,
+  "proven_optimal": true,
+  "eps_optimal": true,
+  "wall_time_ms": 7221,
+  "solver_version": "exact-reference-v0.1",
+  "notes": "Exhaustive support-point search for compact requests.",
+  "metrics": {
+    "volume_utilization": 1.0,
+    "item_coverage": 0.9545,
+    "fragility_score": 1.0,
+    "packing_score": 0.8864
+  },
+  "placements": [
+    {
+      "sku_id": "SKU-BASE-HEAVY",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 600,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 400,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 300,
+        "y_mm": 400,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 900,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 4,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 400,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 5,
+      "position": {
+        "x_mm": 900,
+        "y_mm": 400,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 6,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FRAGILE-MID",
+      "instance_index": 7,
+      "position": {
+        "x_mm": 300,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 600,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 300,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 4,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 200,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 5,
+      "position": {
+        "x_mm": 300,
+        "y_mm": 600,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 6,
+      "position": {
+        "x_mm": 900,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 7,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 8,
+      "position": {
+        "x_mm": 900,
+        "y_mm": 200,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 9,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 600,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 10,
+      "position": {
+        "x_mm": 900,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-FILL",
+      "instance_index": 11,
+      "position": {
+        "x_mm": 900,
+        "y_mm": 600,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    }
+  ],
+  "response": {
+    "task_id": "bench_fragile_mix",
+    "solver_version": "exact-reference-v0.1",
+    "solve_time_ms": 7221,
+    "placements": [
+      {
+        "sku_id": "SKU-BASE-HEAVY",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 600,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 400,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 300,
+          "y_mm": 400,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 900,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 4,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 400,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 5,
+        "position": {
+          "x_mm": 900,
+          "y_mm": 400,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 6,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FRAGILE-MID",
+        "instance_index": 7,
+        "position": {
+          "x_mm": 300,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 600,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 300,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 4,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 200,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 5,
+        "position": {
+          "x_mm": 300,
+          "y_mm": 600,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 6,
+        "position": {
+          "x_mm": 900,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 7,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 8,
+        "position": {
+          "x_mm": 900,
+          "y_mm": 200,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 9,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 600,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 10,
+        "position": {
+          "x_mm": 900,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-FILL",
+        "instance_index": 11,
+        "position": {
+          "x_mm": 900,
+          "y_mm": 600,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      }
+    ],
+    "unplaced": [
+      {
+        "sku_id": "SKU-BASE-HEAVY",
+        "quantity_unplaced": 1,
+        "reason": "height_limit_exceeded"
+      }
+    ]
+  }
+}

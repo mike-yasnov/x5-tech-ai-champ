@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from . import __version__
+from .exact_reference import solve_request as solve_exact_reference_request
 from .hybrid import solve_request as solve_hybrid_request
 from .models import Box, Pallet, Placement, Solution, UnplacedItem
 from .portfolio_block import (
@@ -16,7 +17,7 @@ from .portfolio_block import (
 
 logger = logging.getLogger(__name__)
 
-STRATEGIES = ("portfolio_block", "legacy_hybrid", "legacy_greedy")
+STRATEGIES = ("portfolio_block", "legacy_hybrid", "legacy_greedy", "exact_reference")
 
 
 def _legacy_effort_to_beam_width(n_restarts: int) -> int:
@@ -128,6 +129,12 @@ def solve(
 
     if strategy == "portfolio_block":
         response = solve_portfolio_request(
+            request=request,
+            model_dir=model_dir,
+            time_budget_ms=time_budget_ms,
+        )
+    elif strategy == "exact_reference":
+        response = solve_exact_reference_request(
             request=request,
             model_dir=model_dir,
             time_budget_ms=time_budget_ms,

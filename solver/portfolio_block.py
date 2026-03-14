@@ -22,6 +22,12 @@ from .hybrid.postprocess import postprocess
 from .hybrid.rotations import get_orientations
 from .models import Box, Pallet
 from .packer import order_boxes, pack_greedy, pack_instance_sequence, pack_ordered_boxes
+from .reference_core import (
+    _response_to_placements,
+    try_layer_pattern_exact,
+    try_small_exact_search,
+    try_single_layer_exact,
+)
 from .scenario_selector import (
     SEED_FAMILIES,
     ScenarioFingerprint,
@@ -1042,6 +1048,83 @@ def _placement_signature(placement: PlacedBox) -> Tuple[str, int, int, int, int]
     )
 
 
+def _fragility_cleanup_run(
+    request: Dict[str, Any],
+    placements: List[PlacedBox],
+    leftover: List[RemainingItem],
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+) -> Tuple[List[PlacedBox], List[RemainingItem], PalletState]:
+    if not placements:
+        state, _ = _rebuild_state(request, placements)
+        return placements, leftover, state
+
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    run = PolicyRun(
+        name="fragility_cleanup",
+        placements=_reindex_placements(placements),
+        remaining=_clone_remaining(leftover),
+        block_steps=[],
+        score=_solution_proxy(_rebuild_state(request, placements)[0], total_items),
+        elapsed_ms=0,
+    )
+    repaired = _repair_remove_and_refill(
+        request=request,
+        run=run,
+        checker=checker,
+        candidate_gen=candidate_gen,
+        budget_ms=60,
+    )
+    repaired_state, _ = _rebuild_state(request, repaired.placements)
+    if _run_sort_key(repaired) <= _run_sort_key(run):
+        state, _ = _rebuild_state(request, placements)
+        return placements, leftover, state
+    return repaired.placements, repaired.remaining, repaired_state
+
+
+def _maybe_reference_assist(
+    request: Dict[str, Any],
+    placements: List[PlacedBox],
+    total_items: int,
+) -> Optional[Tuple[List[PlacedBox], float]]:
+    best_score = _solution_proxy(_rebuild_state(request, placements)[0], total_items)
+    best_placements: Optional[List[PlacedBox]] = None
+
+    attempts = [
+        try_single_layer_exact(request, time_limit_s=0.35, solver_version=SOLVER_VERSION),
+        try_layer_pattern_exact(request, time_limit_s=0.35, solver_version=SOLVER_VERSION),
+    ]
+    if total_items <= 18:
+        incumbent_response = placements_to_dict = _format_output(
+            request["task_id"],
+            placements,
+            _remaining_from_placements(request["boxes"], placements),
+            request["boxes"],
+            _rebuild_state(request, placements)[0],
+            0,
+        )
+        attempts.append(
+            try_small_exact_search(
+                request,
+                incumbent_response=placements_to_dict,
+                time_limit_s=0.35,
+                solver_version=SOLVER_VERSION,
+            )
+        )
+    for attempt in attempts:
+        if attempt is None:
+            continue
+        candidate_placements = _response_to_placements(request, attempt.response)
+        candidate_state, _ = _rebuild_state(request, candidate_placements)
+        candidate_score = _solution_proxy(candidate_state, total_items)
+        if candidate_score > best_score + 1e-9:
+            best_score = candidate_score
+            best_placements = candidate_placements
+    if best_placements is None:
+        return None
+    return best_placements, best_score
+
+
 def _finalize_run(
     request: Dict[str, Any],
     run: PolicyRun,
@@ -1066,9 +1149,29 @@ def _finalize_run(
     )
     post_state, _ = _rebuild_state(request, post_placements)
     total_items = sum(box["quantity"] for box in request["boxes"])
-    if _solution_proxy(post_state, total_items) > _solution_proxy(final_state, total_items) + 1e-9:
-        return post_placements, post_leftover, post_state
-    return placements, leftover, final_state
+    best_placements, best_leftover, best_state = placements, leftover, final_state
+    if _solution_proxy(post_state, total_items) > _solution_proxy(best_state, total_items) + 1e-9:
+        best_placements, best_leftover, best_state = post_placements, post_leftover, post_state
+
+    cleaned_placements, cleaned_leftover, cleaned_state = _fragility_cleanup_run(
+        request=request,
+        placements=best_placements,
+        leftover=best_leftover,
+        checker=checker,
+        candidate_gen=candidate_gen,
+    )
+    if _solution_proxy(cleaned_state, total_items) > _solution_proxy(best_state, total_items) + 1e-9:
+        best_placements, best_leftover, best_state = cleaned_placements, cleaned_leftover, cleaned_state
+
+    assisted = _maybe_reference_assist(request, best_placements, total_items)
+    if assisted is not None:
+        assisted_placements, _ = assisted
+        assisted_leftover = _remaining_from_placements(request["boxes"], assisted_placements)
+        assisted_state, _ = _rebuild_state(request, assisted_placements)
+        if _solution_proxy(assisted_state, total_items) > _solution_proxy(best_state, total_items) + 1e-9:
+            best_placements, best_leftover, best_state = assisted_placements, assisted_leftover, assisted_state
+
+    return best_placements, best_leftover, best_state
 
 
 def _construct_with_policy(
@@ -1643,8 +1746,18 @@ def _rank_candidates(
         final_scores = 0.7 * normalize_scores(model_scores) + 0.3 * normalize_scores(
             heuristic_scores
         )
-    order = np.argsort(-final_scores)
-    candidates[:] = [candidates[idx] for idx in order]
+    ranked = list(enumerate(candidates))
+    ranked.sort(
+        key=lambda item: (
+            float(final_scores[item[0]]),
+            item[1].item_count,
+            -item[1].aabb.z_min,
+            item[1].support_ratio,
+            item[1].wall_count,
+        ),
+        reverse=True,
+    )
+    candidates[:] = [candidate for _, candidate in ranked]
 
 
 def _apply_block_candidate(
@@ -1662,7 +1775,7 @@ def _select_best_run(runs: Sequence[PolicyRun]) -> PolicyRun:
 
 
 def _run_sort_key(run: PolicyRun) -> Tuple[float, int]:
-    return (run.score, -run.elapsed_ms)
+    return (run.score, len(run.placements), -run.elapsed_ms)
 
 
 def _frontier_exposure(candidate: BlockCandidate, state: PalletState) -> float:

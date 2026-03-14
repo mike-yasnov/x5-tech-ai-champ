@@ -8,7 +8,7 @@ from generator import generate_scenario
 from scenario_catalog import BENCHMARK_SCENARIOS
 from solver.models import Box, Pallet, solution_to_dict
 from solver.packer import SORT_KEYS, pack_greedy
-from validator import evaluate_solution
+from validator import evaluate_packing_quality, evaluate_solution
 
 
 def request_to_models(request_dict: dict):
@@ -52,6 +52,9 @@ def benchmark_scenario(scenario_name: str, seed: int) -> Dict[str, Any]:
                 "strategy": strategy_name,
                 "valid": result.get("valid", False),
                 "final_score": result.get("final_score", 0.0),
+                "packing_score": evaluate_packing_quality(
+                    request_dict, solution_to_dict(solution)
+                ).get("packing_score", 0.0),
                 "metrics": result.get("metrics", {}),
                 "placed": len(solution.placements),
                 "time_ms": solution.solve_time_ms,
@@ -71,12 +74,12 @@ def render_markdown(report: List[Dict[str, Any]], limit: int) -> str:
     for scenario in report:
         lines.append(f"### {scenario['scenario']}")
         lines.append("")
-        lines.append("| Strategy | Score | Valid | Placed | Time (ms) |")
-        lines.append("|----------|-------|-------|--------|-----------|")
+        lines.append("| Strategy | Final | Pack | Valid | Placed | Time (ms) |")
+        lines.append("|----------|-------|------|-------|--------|-----------|")
         rows = scenario["results"] if limit <= 0 else scenario["results"][:limit]
         for row in rows:
             lines.append(
-                f"| {row['strategy']} | {row['final_score']:.4f} | {row['valid']} | {row['placed']} | {row['time_ms']} |"
+                f"| {row['strategy']} | {row['final_score']:.4f} | {row.get('packing_score', 0):.4f} | {row['valid']} | {row['placed']} | {row['time_ms']} |"
             )
         lines.append("")
     return "\n".join(lines)

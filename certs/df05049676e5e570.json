@@ -1,0 +1,1901 @@
+{
+  "request_hash": "df05049676e5e570",
+  "task_id": "bench_fragile_cap_mix",
+  "strategy": "exact_reference",
+  "stage": "portfolio_block",
+  "packing_score_lb": 0.6762,
+  "packing_score_ub": 0.8957,
+  "gap": 0.2195,
+  "proven_optimal": false,
+  "eps_optimal": false,
+  "wall_time_ms": 3353,
+  "solver_version": "exact-reference-v0.1",
+  "notes": "Baseline lower bound from the fast portfolio solver.",
+  "metrics": {
+    "volume_utilization": 0.7633,
+    "item_coverage": 0.8986,
+    "fragility_score": 0.25,
+    "packing_score": 0.6762
+  },
+  "placements": [
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 406,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 406,
+        "width_mm": 609,
+        "height_mm": 400
+      },
+      "rotation_code": "HLW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 400
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 4,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 406,
+        "z_mm": 400
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 5,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 0,
+        "z_mm": 400
+      },
+      "dimensions_placed": {
+        "length_mm": 406,
+        "width_mm": 609,
+        "height_mm": 400
+      },
+      "rotation_code": "HLW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 6,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 800
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 7,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 406,
+        "z_mm": 800
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 8,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 0,
+        "z_mm": 800
+      },
+      "dimensions_placed": {
+        "length_mm": 406,
+        "width_mm": 609,
+        "height_mm": 400
+      },
+      "rotation_code": "HLW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 9,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 1200
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 10,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 406,
+        "z_mm": 1200
+      },
+      "dimensions_placed": {
+        "length_mm": 609,
+        "width_mm": 406,
+        "height_mm": 400
+      },
+      "rotation_code": "LHW"
+    },
+    {
+      "sku_id": "SKU-CHIPS-1893",
+      "instance_index": 11,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 0,
+        "z_mm": 1200
+      },
+      "dimensions_placed": {
+        "length_mm": 406,
+        "width_mm": 609,
+        "height_mm": 400
+      },
+      "rotation_code": "HLW"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 119
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 238
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 357
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 4,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 476
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 5,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 6,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 595
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 7,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 119
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 8,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 714
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 9,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 238
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 10,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 833
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 11,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 357
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 12,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 952
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 13,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 476
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 14,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 1071
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 15,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 595
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 16,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 1190
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 17,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 714
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 18,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 1309
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 19,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 833
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 20,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 1428
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 21,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 952
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 22,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 1071
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 23,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 1190
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 24,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 1309
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 25,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 1428
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 26,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 1547
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 27,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 1547
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 28,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 609,
+        "z_mm": 1666
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 29,
+      "position": {
+        "x_mm": 905,
+        "y_mm": 609,
+        "z_mm": 1666
+      },
+      "dimensions_placed": {
+        "length_mm": 198,
+        "width_mm": 296,
+        "height_mm": 119
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 812,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 494,
+        "y_mm": 812,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 812,
+        "z_mm": 319
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 4,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 0,
+        "z_mm": 319
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 5,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 812,
+        "z_mm": 638
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 6,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 0,
+        "z_mm": 638
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 7,
+      "position": {
+        "x_mm": 247,
+        "y_mm": 812,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 8,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 247,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 9,
+      "position": {
+        "x_mm": 247,
+        "y_mm": 812,
+        "z_mm": 319
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 10,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 247,
+        "z_mm": 319
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 11,
+      "position": {
+        "x_mm": 494,
+        "y_mm": 812,
+        "z_mm": 319
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 12,
+      "position": {
+        "x_mm": 247,
+        "y_mm": 812,
+        "z_mm": 638
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 13,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 247,
+        "z_mm": 638
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 14,
+      "position": {
+        "x_mm": 494,
+        "y_mm": 812,
+        "z_mm": 638
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 15,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 812,
+        "z_mm": 957
+      },
+      "dimensions_placed": {
+        "length_mm": 247,
+        "width_mm": 173,
+        "height_mm": 319
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-WINE-3298",
+      "instance_index": 16,
+      "position": {
+        "x_mm": 1015,
+        "y_mm": 0,
+        "z_mm": 957
+      },
+      "dimensions_placed": {
+        "length_mm": 173,
+        "width_mm": 247,
+        "height_mm": 319
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 30,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 1600
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 31,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 406,
+        "z_mm": 1600
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-CANNED-3605",
+      "instance_index": 32,
+      "position": {
+        "x_mm": 609,
+        "y_mm": 0,
+        "z_mm": 1600
+      },
+      "dimensions_placed": {
+        "length_mm": 296,
+        "width_mm": 198,
+        "height_mm": 119
+      },
+      "rotation_code": "LWH"
+    }
+  ],
+  "response": {
+    "task_id": "bench_fragile_cap_mix",
+    "solver_version": "exact-reference-v0.1",
+    "solve_time_ms": 3353,
+    "placements": [
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 406,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 406,
+          "width_mm": 609,
+          "height_mm": 400
+        },
+        "rotation_code": "HLW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 400
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 4,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 406,
+          "z_mm": 400
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 5,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 0,
+          "z_mm": 400
+        },
+        "dimensions_placed": {
+          "length_mm": 406,
+          "width_mm": 609,
+          "height_mm": 400
+        },
+        "rotation_code": "HLW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 6,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 800
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 7,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 406,
+          "z_mm": 800
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 8,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 0,
+          "z_mm": 800
+        },
+        "dimensions_placed": {
+          "length_mm": 406,
+          "width_mm": 609,
+          "height_mm": 400
+        },
+        "rotation_code": "HLW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 9,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 1200
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 10,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 406,
+          "z_mm": 1200
+        },
+        "dimensions_placed": {
+          "length_mm": 609,
+          "width_mm": 406,
+          "height_mm": 400
+        },
+        "rotation_code": "LHW"
+      },
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "instance_index": 11,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 0,
+          "z_mm": 1200
+        },
+        "dimensions_placed": {
+          "length_mm": 406,
+          "width_mm": 609,
+          "height_mm": 400
+        },
+        "rotation_code": "HLW"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 119
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 238
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 357
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 4,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 476
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 5,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 6,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 595
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 7,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 119
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 8,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 714
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 9,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 238
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 10,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 833
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 11,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 357
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 12,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 952
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 13,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 476
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 14,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 1071
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 15,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 595
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 16,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 1190
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 17,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 714
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 18,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 1309
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 19,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 833
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 20,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 1428
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 21,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 952
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 22,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 1071
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 23,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 1190
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 24,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 1309
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 25,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 1428
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 26,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 1547
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 27,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 1547
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 28,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 609,
+          "z_mm": 1666
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 29,
+        "position": {
+          "x_mm": 905,
+          "y_mm": 609,
+          "z_mm": 1666
+        },
+        "dimensions_placed": {
+          "length_mm": 198,
+          "width_mm": 296,
+          "height_mm": 119
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 812,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 494,
+          "y_mm": 812,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 812,
+          "z_mm": 319
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 4,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 0,
+          "z_mm": 319
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 5,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 812,
+          "z_mm": 638
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 6,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 0,
+          "z_mm": 638
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 7,
+        "position": {
+          "x_mm": 247,
+          "y_mm": 812,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 8,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 247,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 9,
+        "position": {
+          "x_mm": 247,
+          "y_mm": 812,
+          "z_mm": 319
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 10,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 247,
+          "z_mm": 319
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 11,
+        "position": {
+          "x_mm": 494,
+          "y_mm": 812,
+          "z_mm": 319
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 12,
+        "position": {
+          "x_mm": 247,
+          "y_mm": 812,
+          "z_mm": 638
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 13,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 247,
+          "z_mm": 638
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 14,
+        "position": {
+          "x_mm": 494,
+          "y_mm": 812,
+          "z_mm": 638
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 15,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 812,
+          "z_mm": 957
+        },
+        "dimensions_placed": {
+          "length_mm": 247,
+          "width_mm": 173,
+          "height_mm": 319
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-WINE-3298",
+        "instance_index": 16,
+        "position": {
+          "x_mm": 1015,
+          "y_mm": 0,
+          "z_mm": 957
+        },
+        "dimensions_placed": {
+          "length_mm": 173,
+          "width_mm": 247,
+          "height_mm": 319
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 30,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 1600
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 31,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 406,
+          "z_mm": 1600
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-CANNED-3605",
+        "instance_index": 32,
+        "position": {
+          "x_mm": 609,
+          "y_mm": 0,
+          "z_mm": 1600
+        },
+        "dimensions_placed": {
+          "length_mm": 296,
+          "width_mm": 198,
+          "height_mm": 119
+        },
+        "rotation_code": "LWH"
+      }
+    ],
+    "unplaced": [
+      {
+        "sku_id": "SKU-CHIPS-1893",
+        "quantity_unplaced": 1,
+        "reason": "height_limit_exceeded"
+      },
+      {
+        "sku_id": "SKU-EGGS-8201",
+        "quantity_unplaced": 6,
+        "reason": "height_limit_exceeded"
+      }
+    ]
+  }
+}

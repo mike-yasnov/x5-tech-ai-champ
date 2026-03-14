@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import time
+from pathlib import Path
 
 from generator import generate_scenario
 from scenario_catalog import (
@@ -18,8 +19,10 @@ from scenario_catalog import (
     EXTENDED_REALISTIC_SCENARIOS,
     ORGANIZER_SCENARIOS,
 )
+from solver.exact_reference import certify_request
+from solver.reference_core import request_hash
 from solver.packer import SORT_KEYS
-from validator import evaluate_solution
+from validator import evaluate_packing_quality, evaluate_solution
 from solver.models import Pallet, Box, solution_to_dict
 from solver.solver import solve
 
@@ -52,11 +55,36 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
+def _certificate_path(certificate_dir: str | None, request_dict: dict) -> Path | None:
+    if not certificate_dir:
+        return None
+    cert_dir = Path(certificate_dir)
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    return cert_dir / f"{request_hash(request_dict)}.json"
+
+
+def _load_certificate(certificate_dir: str | None, request_dict: dict) -> dict | None:
+    path = _certificate_path(certificate_dir, request_dict)
+    if path is None or not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _write_certificate(certificate_dir: str | None, request_dict: dict, certificate: dict) -> None:
+    path = _certificate_path(certificate_dir, request_dict)
+    if path is None:
+        return
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(certificate, file, indent=2, ensure_ascii=False)
+
+
 def run_benchmark(
     n_restarts: int = 10,
     time_budget_ms: int = 5000,
     strategy: str = "portfolio_block",
     model_dir: str = "models",
+    certificate_dir: str | None = None,
 ) -> list:
     results = []
     if n_restarts is None:
@@ -68,38 +96,65 @@ def run_benchmark(
         )
         task_id, pallet, boxes = _request_to_models(request_dict)
 
-        t0 = time.perf_counter()
-        solution = solve(
-            task_id=task_id,
-            pallet=pallet,
-            boxes=boxes,
-            request_dict=request_dict,
-            n_restarts=n_restarts,
-            time_budget_ms=time_budget_ms,
-            model_dir=model_dir,
-            strategy=strategy,
-        )
-        wall_time_ms = int((time.perf_counter() - t0) * 1000)
+        certificate = None
+        if strategy == "exact_reference":
+            t0 = time.perf_counter()
+            certificate = certify_request(
+                request=request_dict,
+                model_dir=model_dir,
+                time_budget_ms=time_budget_ms,
+            )
+            wall_time_ms = int((time.perf_counter() - t0) * 1000)
+            _write_certificate(certificate_dir, request_dict, certificate)
+            response_dict = certificate["response"]
+        else:
+            t0 = time.perf_counter()
+            solution = solve(
+                task_id=task_id,
+                pallet=pallet,
+                boxes=boxes,
+                request_dict=request_dict,
+                n_restarts=n_restarts,
+                time_budget_ms=time_budget_ms,
+                model_dir=model_dir,
+                strategy=strategy,
+            )
+            wall_time_ms = int((time.perf_counter() - t0) * 1000)
+            response_dict = solution_to_dict(solution)
+            certificate = _load_certificate(certificate_dir, request_dict)
 
-        response_dict = solution_to_dict(solution)
         eval_result = evaluate_solution(request_dict, response_dict)
+        packing_result = evaluate_packing_quality(request_dict, response_dict)
 
         total_items = sum(b["quantity"] for b in request_dict["boxes"])
+        quality_gap = None
+        packing_score_ub = None
+        if certificate is not None:
+            packing_score_ub = certificate.get("packing_score_ub")
+            quality_gap = round(
+                max(0.0, packing_score_ub - packing_result.get("packing_score", 0.0)),
+                4,
+            )
 
         entry = {
             "scenario": scenario_type,
             "valid": eval_result.get("valid", False),
             "final_score": eval_result.get("final_score", 0.0),
             "metrics": eval_result.get("metrics", {}),
-            "placed": len(solution.placements),
+            "packing_score": packing_result.get("packing_score", 0.0),
+            "packing_score_ub": packing_score_ub,
+            "quality_gap": quality_gap,
+            "placed": len(response_dict.get("placements", [])),
             "total_items": total_items,
-            "solve_time_ms": solution.solve_time_ms,
+            "solve_time_ms": response_dict.get("wall_time_ms", wall_time_ms),
             "wall_time_ms": wall_time_ms,
+            "score_time_ms": response_dict.get("solve_time_ms", wall_time_ms),
             "strategy": strategy,
             "error": eval_result.get("error"),
             "response": response_dict,
             "request_pallet": request_dict["pallet"],
             "request_boxes": request_dict["boxes"],
+            "certificate": certificate,
         }
         results.append(entry)
 
@@ -112,10 +167,10 @@ def format_markdown(results: list) -> str:
     def render_table(title: str, rows: list) -> list:
         section = [f"### {title}", ""]
         section.append(
-            "| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
+            "| Scenario | Final | Pack | Gap | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
         )
         section.append(
-            "|----------|-------|--------|----------|-----------|------------|--------|-----------|"
+            "|----------|-------|------|-----|--------|----------|-----------|------------|--------|-----------|"
         )
 
         total_score = 0.0
@@ -125,6 +180,8 @@ def format_markdown(results: list) -> str:
                 section.append(
                     f"| {r['scenario']} "
                     f"| **{r['final_score']:.4f}** "
+                    f"| {r.get('packing_score', 0):.4f} "
+                    f"| {r.get('quality_gap', '-') if r.get('quality_gap') is not None else '-'} "
                     f"| {m.get('volume_utilization', 0):.4f} "
                     f"| {m.get('item_coverage', 0):.4f} "
                     f"| {m.get('fragility_score', 0):.4f} "
@@ -137,7 +194,7 @@ def format_markdown(results: list) -> str:
                 section.append(
                     f"| {r['scenario']} "
                     f"| **INVALID** "
-                    f"| - | - | - | - "
+                    f"| - | - | - | - | - | - "
                     f"| {r['placed']}/{r['total_items']} "
                     f"| {r['solve_time_ms']} |"
                 )
@@ -219,9 +276,14 @@ def main():
         "--viz", default=None, help="Generate 3D visualization HTML files to directory"
     )
     parser.add_argument(
+        "--certificate-dir",
+        default=None,
+        help="Directory for exact-reference certificates; exact runs write there and non-exact runs read from there when available.",
+    )
+    parser.add_argument(
         "--strategy",
         default="portfolio_block",
-        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy"],
+        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy", "exact_reference"],
         help="Runtime strategy to benchmark",
     )
     parser.add_argument(
@@ -235,6 +297,7 @@ def main():
         n_restarts=args.restarts,
         strategy=args.strategy,
         model_dir=args.model_dir,
+        certificate_dir=args.certificate_dir,
     )
     md = format_markdown(results)
     print(md)
@@ -245,7 +308,7 @@ def main():
             {
                 k: v
                 for k, v in r.items()
-                if k not in ("response", "request_pallet", "request_boxes")
+                if k not in ("response", "request_pallet", "request_boxes", "certificate")
             }
             for r in results
         ]

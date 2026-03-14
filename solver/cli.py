@@ -37,7 +37,7 @@ def main():
     parser.add_argument(
         "--strategy",
         default="portfolio_block",
-        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy"],
+        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy", "exact_reference"],
         help="Runtime strategy (default: portfolio_block)",
     )
     parser.add_argument(

@@ -1,0 +1,96 @@
+{
+  "request_hash": "5b4f34e85b438e69",
+  "task_id": "bench_count_preference",
+  "strategy": "exact_reference",
+  "stage": "general_exact_search",
+  "packing_score_lb": 0.8,
+  "packing_score_ub": 0.8,
+  "gap": 0.0,
+  "proven_optimal": true,
+  "eps_optimal": true,
+  "wall_time_ms": 95,
+  "solver_version": "exact-reference-v0.1",
+  "notes": "Exhaustive support-point search for compact requests.",
+  "metrics": {
+    "volume_utilization": 1.0,
+    "item_coverage": 0.6667,
+    "fragility_score": 1.0,
+    "packing_score": 0.8
+  },
+  "placements": [
+    {
+      "sku_id": "SKU-SMALL-300x400",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-SMALL-300x400",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 300,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 300,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    }
+  ],
+  "response": {
+    "task_id": "bench_count_preference",
+    "solver_version": "exact-reference-v0.1",
+    "solve_time_ms": 95,
+    "placements": [
+      {
+        "sku_id": "SKU-SMALL-300x400",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-SMALL-300x400",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 300,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 300,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      }
+    ],
+    "unplaced": [
+      {
+        "sku_id": "SKU-LARGE-600x400",
+        "quantity_unplaced": 1,
+        "reason": "height_limit_exceeded"
+      }
+    ]
+  }
+}
