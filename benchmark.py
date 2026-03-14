@@ -96,7 +96,6 @@ def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
             "valid": eval_result.get("valid", False),
             "final_score": eval_result.get("final_score", 0.0),
             "metrics": eval_result.get("metrics", {}),
-            "constraint_checks": eval_result.get("constraint_checks", {}),
             "placed": len(solution.placements),
             "total_items": total_items,
             "solve_time_ms": solution.solve_time_ms,
@@ -166,40 +165,6 @@ def format_markdown(results: list) -> str:
         else 0
     )
     lines.append(f"**Overall average: {overall_avg:.4f}**")
-
-    # Constraint compliance table
-    lines.append("")
-    lines.append("### Constraint Compliance")
-    lines.append("")
-    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
-    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
-    for r in results:
-        cc = r.get("constraint_checks", {})
-        if not r["valid"]:
-            lines.append(f"| {r['scenario']} | FAIL | - | - | - | - | - | - |")
-            continue
-
-        def _fmt(v):
-            if v is True:
-                return "PASS"
-            if v == "pass":
-                return "PASS"
-            if v == "n/a":
-                return "n/a"
-            return str(v)
-
-        lines.append(
-            f"| {r['scenario']} "
-            f"| {_fmt(cc.get('bounds', '?'))} "
-            f"| {_fmt(cc.get('no_collision', '?'))} "
-            f"| {_fmt(cc.get('support_60pct', '?'))} "
-            f"| {_fmt(cc.get('weight_limit', '?'))} "
-            f"| {_fmt(cc.get('strict_upright', '?'))} "
-            f"| {_fmt(cc.get('stackable', '?'))} "
-            f"| {cc.get('fragility_violations', '?')} |"
-        )
-    lines.append("")
-
     return "\n".join(lines)
 
 
