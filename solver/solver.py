@@ -157,8 +157,9 @@ def _run_strategies_parallel(
                 best_key = key_name
 
             # Check wall-clock budget — cancel remaining if exceeded
+            # With N_WORKERS parallel, CI wall time is reduced by worker count
             elapsed = (time.perf_counter() - t0) * 1000
-            estimated_ci_elapsed = elapsed * CI_SLOWDOWN_FACTOR
+            estimated_ci_elapsed = elapsed * CI_SLOWDOWN_FACTOR / N_WORKERS
             if estimated_ci_elapsed > strategy_budget_ms:
                 logger.info("[solve] parallel budget reached at %d/%d completed (est CI %.0fms)",
                             completed, n_to_run, estimated_ci_elapsed)
