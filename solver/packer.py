@@ -27,6 +27,65 @@ def _expand_boxes(boxes: List[Box]) -> List[Tuple[Box, int]]:
     return result
 
 
+def _find_best_placement(
+    state: PalletState,
+    box: Box,
+    placement_policy: str,
+) -> Optional[Tuple[int, int, int, int, int, int, str]]:
+    orientations = get_orientations(box)
+    best_score = -1.0
+    best_placement: Optional[Tuple[int, int, int, int, int, int, str]] = None
+
+    for ep in list(state.extreme_points):
+        ex, ey, ez = ep
+        for dx, dy, dz, rot_code in orientations:
+            if not state.can_place(
+                dx,
+                dy,
+                dz,
+                ex,
+                ey,
+                ez,
+                box.weight_kg,
+                box.fragile,
+                box.stackable,
+            ):
+                continue
+
+            score = score_placement(
+                state,
+                dx,
+                dy,
+                dz,
+                ex,
+                ey,
+                ez,
+                box.weight_kg,
+                box.fragile,
+                policy=placement_policy,
+            )
+            if score > best_score:
+                best_score = score
+                best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+
+    return best_placement
+
+
+def _residual_fill_order(
+    failed_instances: List[Tuple[Box, int]],
+) -> List[Tuple[Box, int]]:
+    return sorted(
+        failed_instances,
+        key=lambda item: (
+            item[0].fragile,
+            item[0].strict_upright,
+            item[0].volume,
+            item[0].base_area,
+            item[0].weight_kg,
+        ),
+    )
+
+
 # ── Greedy packer ───────────────────────────────────────────────────
 
 
@@ -55,6 +114,7 @@ def pack_greedy(
     placements: List[Placement] = []
     unplaced_qty: Dict[str, int] = defaultdict(int)
     unplaced_reason: Dict[str, str] = {}
+    failed_instances: List[Tuple[Box, int]] = []
 
     logger.info(
         "[pack_greedy] task=%s sort=%s policy=%s randomized=%s total_instances=%d",
@@ -66,42 +126,7 @@ def pack_greedy(
     )
 
     for box, inst_idx in instances:
-        orientations = get_orientations(box)
-        best_score = -1.0
-        best_placement: Optional[Tuple[int, int, int, int, int, int, str]] = None
-
-        # Try each EP × orientation
-        for ep in list(state.extreme_points):
-            ex, ey, ez = ep
-            for dx, dy, dz, rot_code in orientations:
-                if not state.can_place(
-                    dx,
-                    dy,
-                    dz,
-                    ex,
-                    ey,
-                    ez,
-                    box.weight_kg,
-                    box.fragile,
-                    box.stackable,
-                ):
-                    continue
-
-                sc = score_placement(
-                    state,
-                    dx,
-                    dy,
-                    dz,
-                    ex,
-                    ey,
-                    ez,
-                    box.weight_kg,
-                    box.fragile,
-                    policy=placement_policy,
-                )
-                if sc > best_score:
-                    best_score = sc
-                    best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+        best_placement = _find_best_placement(state, box, placement_policy)
 
         if best_placement is not None:
             dx, dy, dz, px, py, pz, rot_code = best_placement
@@ -136,14 +161,56 @@ def pack_greedy(
                 reason = "weight_limit_exceeded"
             else:
                 reason = "no_space"
-            unplaced_qty[box.sku_id] += 1
-            unplaced_reason[box.sku_id] = reason
+            failed_instances.append((box, inst_idx))
             logger.debug(
                 "[pack_greedy] unplaced sku=%s instance=%d reason=%s",
                 box.sku_id,
                 inst_idx,
                 reason,
             )
+
+    if failed_instances:
+        residual_policy = (
+            "fragile_safe"
+            if placement_policy in {"fragile_safe", "center_stable", "max_support"}
+            else "max_contact"
+        )
+        for box, inst_idx in _residual_fill_order(failed_instances):
+            best_placement = _find_best_placement(state, box, residual_policy)
+            if best_placement is not None:
+                dx, dy, dz, px, py, pz, rot_code = best_placement
+                state.place(
+                    box.sku_id,
+                    dx,
+                    dy,
+                    dz,
+                    px,
+                    py,
+                    pz,
+                    box.weight_kg,
+                    box.fragile,
+                    box.stackable,
+                )
+                placements.append(
+                    Placement(
+                        sku_id=box.sku_id,
+                        instance_index=inst_idx,
+                        x_mm=px,
+                        y_mm=py,
+                        z_mm=pz,
+                        length_mm=dx,
+                        width_mm=dy,
+                        height_mm=dz,
+                        rotation_code=rot_code,
+                    )
+                )
+            else:
+                if state.current_weight + box.weight_kg > pallet.max_weight_kg:
+                    reason = "weight_limit_exceeded"
+                else:
+                    reason = "no_space"
+                unplaced_qty[box.sku_id] += 1
+                unplaced_reason[box.sku_id] = reason
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 

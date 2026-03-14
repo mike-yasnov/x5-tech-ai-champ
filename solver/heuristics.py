@@ -90,6 +90,34 @@ def _sort_smalls_last(box: Box) -> tuple:
     return (-box.volume, -mn, -box.weight_kg)
 
 
+def _sort_stability_phased(box: Box) -> tuple:
+    if box.fragile:
+        phase = 3
+    elif not box.stackable:
+        phase = 2
+    elif box.strict_upright:
+        phase = 1
+    else:
+        phase = 0
+    return (phase, -box.base_area, -box.weight_kg, -box.volume)
+
+
+def _sort_support_surface_desc(box: Box) -> tuple:
+    support_value = (
+        1 if box.stackable else 0,
+        box.base_area,
+        box.weight_kg,
+        box.volume,
+    )
+    return (
+        -support_value[0],
+        -support_value[1],
+        -support_value[2],
+        -support_value[3],
+        box.fragile,
+    )
+
+
 SORT_KEYS: Dict[str, SortKey] = {
     "volume_desc": _sort_volume_desc,
     "weight_desc": _sort_weight_desc,
@@ -106,6 +134,8 @@ SORT_KEYS: Dict[str, SortKey] = {
     "slenderness_desc": _sort_slenderness_desc,
     "weighted_volume": _sort_weighted_volume,
     "smalls_last": _sort_smalls_last,
+    "stability_phased": _sort_stability_phased,
+    "support_surface_desc": _sort_support_surface_desc,
 }
 
 
@@ -173,6 +203,16 @@ STRATEGY_CONFIGS: List[StrategyConfig] = [
     StrategyConfig("slender__max_support", "slenderness_desc", "max_support"),
     StrategyConfig("weighted_volume__center", "weighted_volume", "center_stable"),
     StrategyConfig("smalls_last__max_contact", "smalls_last", "max_contact"),
+    StrategyConfig(
+        "stability_phased__fragile_safe", "stability_phased", "fragile_safe"
+    ),
+    StrategyConfig("stability_phased__max_support", "stability_phased", "max_support"),
+    StrategyConfig(
+        "support_surface__max_support", "support_surface_desc", "max_support"
+    ),
+    StrategyConfig(
+        "support_surface__fragile_safe", "support_surface_desc", "fragile_safe"
+    ),
 ]
 
 STRATEGY_CONFIGS.extend(
@@ -231,6 +271,7 @@ def select_strategy_configs(
                 "area__max_support",
                 "area__fragile_safe",
                 "weight__fragile_safe",
+                "stability_phased__fragile_safe",
             ]
         )
 
@@ -258,6 +299,7 @@ def select_strategy_configs(
                 "weight__center_stable",
                 "density__center_stable",
                 "weighted_volume__center",
+                "support_surface__max_support",
             ]
         )
 
@@ -266,6 +308,7 @@ def select_strategy_configs(
             [
                 "homogeneous__dbfl",
                 "homogeneous__max_support",
+                "support_surface__fragile_safe",
             ]
         )
 
@@ -276,6 +319,7 @@ def select_strategy_configs(
                 "perimeter__max_contact",
                 "slender__min_height",
                 "homogeneous__fragile_safe",
+                "stability_phased__max_support",
             ]
         )
 
