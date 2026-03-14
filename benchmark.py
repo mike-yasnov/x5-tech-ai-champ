@@ -23,6 +23,7 @@ ORGANIZER_SCENARIOS = [
     ("fragile_tower", 43),
     ("liquid_tetris", 44),
     ("random_mixed", 45),
+    ("exact_fit", 46),
 ]
 
 PROJECT_SCENARIOS = [
