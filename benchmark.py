@@ -8,10 +8,10 @@ Outputs a markdown table and optionally a JSON file with detailed results.
 
 import argparse
 import json
-import sys
 import time
 
 from generator import generate_scenario
+from solver.packer import SORT_KEYS
 from validator import evaluate_solution
 from solver.models import Pallet, Box, solution_to_dict
 from solver.solver import solve
@@ -22,6 +22,10 @@ SCENARIOS = [
     ("fragile_tower", 43),
     ("liquid_tetris", 44),
     ("random_mixed", 45),
+    ("exact_fit", 46),
+    ("fragile_mix", 47),
+    ("support_tetris", 48),
+    ("cavity_fill", 49),
 ]
 
 
@@ -36,26 +40,32 @@ def _request_to_models(request_dict: dict):
     )
     boxes = []
     for b in request_dict["boxes"]:
-        boxes.append(Box(
-            sku_id=b["sku_id"],
-            description=b.get("description", ""),
-            length_mm=b["length_mm"],
-            width_mm=b["width_mm"],
-            height_mm=b["height_mm"],
-            weight_kg=b["weight_kg"],
-            quantity=b["quantity"],
-            strict_upright=b.get("strict_upright", False),
-            fragile=b.get("fragile", False),
-            stackable=b.get("stackable", True),
-        ))
+        boxes.append(
+            Box(
+                sku_id=b["sku_id"],
+                description=b.get("description", ""),
+                length_mm=b["length_mm"],
+                width_mm=b["width_mm"],
+                height_mm=b["height_mm"],
+                weight_kg=b["weight_kg"],
+                quantity=b["quantity"],
+                strict_upright=b.get("strict_upright", False),
+                fragile=b.get("fragile", False),
+                stackable=b.get("stackable", True),
+            )
+        )
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10) -> list:
+def run_benchmark(n_restarts: int | None = None) -> list:
     results = []
+    if n_restarts is None:
+        n_restarts = len(SORT_KEYS)
 
     for scenario_type, seed in SCENARIOS:
-        request_dict = generate_scenario(f"bench_{scenario_type}", scenario_type, seed=seed)
+        request_dict = generate_scenario(
+            f"bench_{scenario_type}", scenario_type, seed=seed
+        )
         task_id, pallet, boxes = _request_to_models(request_dict)
 
         t0 = time.perf_counter()
@@ -93,8 +103,12 @@ def run_benchmark(n_restarts: int = 10) -> list:
 def format_markdown(results: list) -> str:
     lines = []
     lines.append("## Benchmark Results\n")
-    lines.append("| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |")
-    lines.append("|----------|-------|--------|----------|-----------|------------|--------|-----------|")
+    lines.append(
+        "| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
+    )
+    lines.append(
+        "|----------|-------|--------|----------|-----------|------------|--------|-----------|"
+    )
 
     total_score = 0.0
     for r in results:
@@ -127,8 +141,12 @@ def format_markdown(results: list) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark 3D Pallet Packing Solver")
-    parser.add_argument("--restarts", type=int, default=10, help="Number of restarts (default: 10)")
-    parser.add_argument("--output", "-o", default=None, help="Save detailed results to JSON file")
+    parser.add_argument(
+        "--restarts", type=int, default=len(SORT_KEYS), help="Number of restarts"
+    )
+    parser.add_argument(
+        "--output", "-o", default=None, help="Save detailed results to JSON file"
+    )
     args = parser.parse_args()
 
     results = run_benchmark(n_restarts=args.restarts)

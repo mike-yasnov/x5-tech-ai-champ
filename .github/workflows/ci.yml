@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -33,8 +38,8 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
       issues: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -52,19 +57,44 @@ jobs:
         run: |
           python benchmark.py --output benchmark_results.json 2>/dev/null | tee benchmark_output.md
 
+      - name: Run strategy benchmark
+        id: strategy_bench
+        run: |
+          python benchmark_strategies.py --limit 8 --output strategy_results.json 2>/dev/null | tee strategy_output.md
+
+      - name: Add benchmark to job summary
+        run: |
+          echo "# Solver Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          cat benchmark_output.md >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "# Strategy Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          cat strategy_output.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark_results.json
+            benchmark_output.md
+            strategy_results.json
+            strategy_output.md
+
       - name: Post benchmark results to PR
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const output = fs.readFileSync('benchmark_output.md', 'utf8');
+            const strategyOutput = fs.readFileSync('strategy_output.md', 'utf8');
             const results = JSON.parse(fs.readFileSync('benchmark_results.json', 'utf8'));
 
             const avg = results.reduce((s, r) => s + (r.final_score || 0), 0) / results.length;
             const allValid = results.every(r => r.valid);
 
             const status = allValid ? '✅' : '❌';
-            const body = `### ${status} Benchmark Results\n\n${output}\n\n---\n*Automated benchmark by CI*`;
+            const body = `### ${status} Benchmark Results\n\n${output}\n\n### Strategy Comparison\n\n${strategyOutput}\n\n---\n*Automated benchmark by CI*`;
 
             // Find existing comment
             const { data: comments } = await github.rest.issues.listComments({
