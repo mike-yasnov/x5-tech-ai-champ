@@ -312,6 +312,43 @@ def generate_scenario(
             ]
         )
 
+    elif scenario_type == "count_preference":
+        pallet = {
+            "id": "TEST_600x400x200",
+            "length_mm": 600,
+            "width_mm": 400,
+            "max_height_mm": 200,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                {
+                    "sku_id": "SKU-LARGE-600x400",
+                    "description": "Large carton",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 8.0,
+                    "quantity": 1,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+                {
+                    "sku_id": "SKU-SMALL-300x400",
+                    "description": "Small carton",
+                    "length_mm": 300,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 4.0,
+                    "quantity": 2,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+            ]
+        )
+
     elif scenario_type == "weight_limited_repeat":
         pallet = {
             "id": "TRAIN_1219x1016x1800",
@@ -426,6 +463,7 @@ if __name__ == "__main__":
         "fragile_mix",
         "support_tetris",
         "cavity_fill",
+        "count_preference",
         "weight_limited_repeat",
         "fragile_cap_mix",
         "mixed_column_repeat",

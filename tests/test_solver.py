@@ -25,6 +25,7 @@ SCENARIOS = [
     "fragile_mix",
     "support_tetris",
     "cavity_fill",
+    "count_preference",
 ]
 
 
