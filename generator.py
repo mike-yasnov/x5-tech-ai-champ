@@ -81,7 +81,6 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 8.0,
         "upright": True,
         "fragile": True,
-        "stackable": False,
     },
     "chips": {
         "desc": "Chips Carton",
@@ -130,7 +129,7 @@ def create_box(archetype_key: str, qty_min: int, qty_max: int) -> Dict[str, Any]
         "quantity": random.randint(qty_min, qty_max),
         "strict_upright": base["upright"],
         "fragile": base["fragile"],
-        "stackable": base.get("stackable", True),
+        "stackable": True,
     }
 
 
@@ -350,6 +349,141 @@ def generate_scenario(
             ]
         )
 
+    elif scenario_type == "weight_limited_repeat":
+        pallet = {
+            "id": "TRAIN_1219x1016x1800",
+            "length_mm": 1219,
+            "width_mm": 1016,
+            "max_height_mm": 1800,
+            "max_weight_kg": 900.0,
+        }
+        boxes.extend(
+            [
+                create_box("water", 60, 120),
+                create_box("sugar", 30, 70),
+                create_box("banana", 8, 18),
+            ]
+        )
+
+    elif scenario_type == "fragile_cap_mix":
+        pallet = {
+            "id": "TRAIN_1200x1000x1800",
+            "length_mm": 1200,
+            "width_mm": 1000,
+            "max_height_mm": 1800,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                create_box("chips", 12, 28),
+                create_box("wine", 12, 24),
+                create_box("eggs", 6, 10),
+                create_box("canned", 20, 40),
+            ]
+        )
+
+    elif scenario_type == "mixed_column_repeat":
+        pallet = {
+            "id": "TRAIN_1200x800x2000",
+            "length_mm": 1200,
+            "width_mm": 800,
+            "max_height_mm": 2000,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                create_box("banana", 10, 20),
+                create_box("water", 25, 45),
+                create_box("canned", 25, 50),
+            ]
+        )
+
+    elif scenario_type == "small_gap_fill":
+        pallet = {
+            "id": "TRAIN_1200x800x600",
+            "length_mm": 1200,
+            "width_mm": 800,
+            "max_height_mm": 600,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                {
+                    "sku_id": f"SKU-BLOCK-{random.randint(1000, 9999)}",
+                    "description": "Gap maker block",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 12.0,
+                    "quantity": 4,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+                {
+                    "sku_id": f"SKU-FILL-{random.randint(1000, 9999)}",
+                    "description": "Gap filler carton",
+                    "length_mm": 200,
+                    "width_mm": 200,
+                    "height_mm": 200,
+                    "weight_kg": 1.5,
+                    "quantity": 18,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+            ]
+        )
+
+    elif scenario_type == "non_stackable_caps":
+        pallet = {
+            "id": "TEST_1200x800x600",
+            "length_mm": 1200,
+            "width_mm": 800,
+            "max_height_mm": 600,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                {
+                    "sku_id": "SKU-BASE-BLOCK",
+                    "description": "Stackable base block",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 12.0,
+                    "quantity": 4,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+                {
+                    "sku_id": "SKU-DISPLAY-CAP",
+                    "description": "Fragile do-not-stack display cap",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 4.0,
+                    "quantity": 2,
+                    "strict_upright": True,
+                    "fragile": True,
+                    "stackable": False,
+                },
+                {
+                    "sku_id": "SKU-FILLER-200",
+                    "description": "Small filler carton",
+                    "length_mm": 300,
+                    "width_mm": 200,
+                    "height_mm": 200,
+                    "weight_kg": 1.5,
+                    "quantity": 12,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+            ]
+        )
+
     else:
         raise ValueError(f"Unknown scenario_type: {scenario_type}")
 
@@ -379,6 +513,11 @@ if __name__ == "__main__":
         "support_tetris",
         "cavity_fill",
         "count_preference",
+        "weight_limited_repeat",
+        "fragile_cap_mix",
+        "mixed_column_repeat",
+        "small_gap_fill",
+        "non_stackable_caps",
     ]
     for sc in scenarios:
         task = generate_scenario(f"task_{sc}", sc, seed=123 + scenarios.index(sc))

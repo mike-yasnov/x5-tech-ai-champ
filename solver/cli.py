@@ -23,8 +23,22 @@ def main():
         help="Output JSON file (only for single input; for batch, uses response_<name>.json)",
     )
     parser.add_argument(
-        "--restarts", type=int, default=10,
-        help="Number of restarts (default: 10)",
+        "--restarts", type=int, default=None,
+        help="Legacy alias for search effort / beam width",
+    )
+    parser.add_argument(
+        "--beam-width", type=int, default=None,
+        help="Hybrid search beam width (default: 8)",
+    )
+    parser.add_argument(
+        "--model-dir", default="models",
+        help="Optional directory with trained model artifacts",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="portfolio_block",
+        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy", "exact_reference"],
+        help="Runtime strategy (default: portfolio_block)",
     )
     parser.add_argument(
         "--time-budget", type=int, default=900,
@@ -46,6 +60,8 @@ def main():
 
     for input_path in args.inputs:
         task_id, pallet, boxes = load_request(input_path)
+        beam_width = args.beam_width
+        legacy_effort = args.restarts if args.restarts is not None else 10
 
         # Keep original request dict for validator
         with open(input_path, "r", encoding="utf-8") as f:
@@ -56,8 +72,11 @@ def main():
             pallet=pallet,
             boxes=boxes,
             request_dict=request_dict,
-            n_restarts=args.restarts,
+            n_restarts=legacy_effort,
             time_budget_ms=args.time_budget,
+            beam_width=beam_width,
+            model_dir=args.model_dir,
+            strategy=args.strategy,
         )
 
         result = solution_to_dict(solution)
@@ -69,7 +88,7 @@ def main():
             name = input_path.replace("request_", "response_").replace(".json", ".json")
             if name == input_path:
                 name = f"response_{input_path}"
-            out_path = out_path = name
+            out_path = name
 
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)

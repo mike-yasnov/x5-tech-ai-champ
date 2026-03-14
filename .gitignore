@@ -33,6 +33,13 @@ request_*.json
 response_*.json
 benchmark_results.json
 benchmark_output.md
+ranker_data/
+models/*
+!models/.gitkeep
+!models/selector_xgb.json
+!models/selector_meta.json
+*.npz
+*.jsonl
 
 # Visualization output
 viz/
@@ -43,3 +50,6 @@ viz/
 
 # Claude local settings
 .claude/settings.local.json
+
+# VS Code
+.history

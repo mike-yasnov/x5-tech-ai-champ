@@ -1,108 +1,159 @@
-"""Multi-restart solver: runs greedy packer with different sort strategies."""
+"""Public solver entrypoint with strategy dispatch."""
+
+from __future__ import annotations
 
 import logging
-import sys
-import time
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from .models import Box, Pallet, Solution, solution_to_dict
-from .packer import SORT_KEYS, pack_greedy
+from . import __version__
+from .exact_reference import solve_request as solve_exact_reference_request
+from .hybrid import solve_request as solve_hybrid_request
+from .models import Box, Pallet, Placement, Solution, UnplacedItem
+from .portfolio_block import (
+    solve_legacy_greedy_request,
+    solve_request as solve_portfolio_request,
+)
 
-# Add project root to path for validator import
-sys.path.insert(0, ".")
 
 logger = logging.getLogger(__name__)
 
+STRATEGIES = ("portfolio_block", "legacy_hybrid", "legacy_greedy", "exact_reference")
 
-def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
-    """Try to evaluate solution using validator. Returns final_score or None."""
-    try:
-        from validator import evaluate_solution
-        response_dict = solution_to_dict(solution)
-        result = evaluate_solution(request_dict, response_dict)
-        if result.get("valid"):
-            return result.get("final_score", 0.0)
-        else:
-            logger.warning(
-                "[evaluate] invalid solution: %s", result.get("error", "unknown")
-            )
-            return None
-    except ImportError:
-        logger.debug("[evaluate] validator not available, skipping scoring")
-        return None
+
+def _legacy_effort_to_beam_width(n_restarts: int) -> int:
+    """Map the old multi-restart knob to conservative hybrid-search effort."""
+    return max(1, min(4, (max(n_restarts, 1) + 9) // 10))
+
+
+def _request_from_models(task_id: str, pallet: Pallet, boxes: List[Box]) -> Dict[str, Any]:
+    return {
+        "task_id": task_id,
+        "pallet": {
+            "type_id": pallet.type_id,
+            "length_mm": pallet.length_mm,
+            "width_mm": pallet.width_mm,
+            "max_height_mm": pallet.max_height_mm,
+            "max_weight_kg": pallet.max_weight_kg,
+        },
+        "boxes": [
+            {
+                "sku_id": box.sku_id,
+                "description": box.description,
+                "length_mm": box.length_mm,
+                "width_mm": box.width_mm,
+                "height_mm": box.height_mm,
+                "weight_kg": box.weight_kg,
+                "quantity": box.quantity,
+                "strict_upright": box.strict_upright,
+                "fragile": box.fragile,
+                "stackable": box.stackable,
+            }
+            for box in boxes
+        ],
+    }
+
+
+def _solution_from_response(response: Dict[str, Any]) -> Solution:
+    placements = [
+        Placement(
+            sku_id=item["sku_id"],
+            instance_index=item["instance_index"],
+            x_mm=item["position"]["x_mm"],
+            y_mm=item["position"]["y_mm"],
+            z_mm=item["position"]["z_mm"],
+            length_mm=item["dimensions_placed"]["length_mm"],
+            width_mm=item["dimensions_placed"]["width_mm"],
+            height_mm=item["dimensions_placed"]["height_mm"],
+            rotation_code=item["rotation_code"],
+        )
+        for item in response.get("placements", [])
+    ]
+
+    unplaced = [
+        UnplacedItem(
+            sku_id=item["sku_id"],
+            quantity_unplaced=item["quantity_unplaced"],
+            reason=item["reason"],
+        )
+        for item in response.get("unplaced", [])
+    ]
+
+    return Solution(
+        task_id=response["task_id"],
+        solver_version=response.get("solver_version", __version__),
+        solve_time_ms=response.get("solve_time_ms", 0),
+        placements=placements,
+        unplaced=unplaced,
+    )
 
 
 def solve(
     task_id: str,
     pallet: Pallet,
     boxes: List[Box],
-    request_dict: dict,
+    request_dict: Optional[Dict[str, Any]],
     n_restarts: int = 10,
     time_budget_ms: int = 900,
+    beam_width: Optional[int] = None,
+    model_dir: str = "models",
+    strategy: str = "portfolio_block",
 ) -> Solution:
-    """Run greedy packer with multiple sort strategies and return the best solution.
+    """Solve using the configured runtime strategy.
 
-    Args:
-        task_id: Task identifier
-        pallet: Pallet parameters
-        boxes: List of box types
-        request_dict: Original request dict for validator
-        n_restarts: Maximum number of restarts
-        time_budget_ms: Total time budget in milliseconds
+    `n_restarts` is kept as a legacy public knob and now maps to search effort.
     """
-    t0 = time.perf_counter()
-    best_solution: Optional[Solution] = None
-    best_score: float = -1.0
-    best_key: str = ""
+    request = dict(request_dict) if request_dict is not None else _request_from_models(
+        task_id, pallet, boxes
+    )
+    request["task_id"] = task_id
+    if strategy not in STRATEGIES:
+        raise ValueError(f"Unknown strategy: {strategy}")
 
-    sort_key_names = list(SORT_KEYS.keys())
+    effective_beam = (
+        max(1, beam_width)
+        if beam_width is not None
+        else _legacy_effort_to_beam_width(n_restarts)
+    )
+    max_expansions = max(2, min(5, effective_beam))
 
     logger.info(
-        "[solve] task=%s restarts=%d budget=%dms strategies=%s",
-        task_id, n_restarts, time_budget_ms, sort_key_names,
+        "[solve] task=%s strategy=%s legacy_effort=%d beam_width=%d max_expansions=%d budget=%dms model_dir=%s",
+        task_id,
+        strategy,
+        n_restarts,
+        effective_beam,
+        max_expansions,
+        time_budget_ms,
+        model_dir,
     )
 
-    for i in range(min(n_restarts, len(sort_key_names))):
-        elapsed = (time.perf_counter() - t0) * 1000
-        if elapsed > time_budget_ms * 0.9:
-            logger.info("[solve] time budget approaching, stopping at restart %d", i)
-            break
-
-        key_name = sort_key_names[i]
-        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name)
-
-        score = _evaluate_score(request_dict, solution)
-        if score is None:
-            # Fallback: use placement count as proxy
-            score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
-
-        logger.info(
-            "[solve] restart=%d sort=%s score=%.4f placed=%d",
-            i, key_name, score, len(solution.placements),
+    if strategy == "portfolio_block":
+        response = solve_portfolio_request(
+            request=request,
+            model_dir=model_dir,
+            time_budget_ms=time_budget_ms,
+        )
+    elif strategy == "exact_reference":
+        response = solve_exact_reference_request(
+            request=request,
+            model_dir=model_dir,
+            time_budget_ms=time_budget_ms,
+        )
+    elif strategy == "legacy_hybrid":
+        response = solve_hybrid_request(
+            request=request,
+            model_dir=model_dir,
+            beam_width=effective_beam,
+            max_expansions=max_expansions,
+            time_budget_ms=time_budget_ms,
+        )
+    else:
+        response = solve_legacy_greedy_request(
+            request=request,
+            time_budget_ms=time_budget_ms,
         )
 
-        if score > best_score:
-            best_score = score
-            best_solution = solution
-            best_key = key_name
-
-    # Update solve_time_ms to total time
-    total_ms = int((time.perf_counter() - t0) * 1000)
-    if best_solution is not None:
-        best_solution.solve_time_ms = total_ms
-
-    logger.info(
-        "[solve] done best_sort=%s best_score=%.4f total_time=%dms",
-        best_key, best_score, total_ms,
-    )
-
-    if best_solution is None:
-        # Should not happen, but return empty solution as fallback
-        from . import __version__
-        return Solution(
-            task_id=task_id,
-            solver_version=__version__,
-            solve_time_ms=total_ms,
-        )
-
-    return best_solution
+    solution = _solution_from_response(response)
+    solution.task_id = task_id
+    solution.solver_version = __version__
+    return solution

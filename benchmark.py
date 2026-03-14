@@ -9,32 +9,22 @@ Outputs a markdown table and optionally a JSON file with detailed results.
 import argparse
 import json
 import os
-import sys
 import time
+from pathlib import Path
 
 from generator import generate_scenario
+from scenario_catalog import (
+    BENCHMARK_SCENARIOS,
+    DIAGNOSTIC_SCENARIOS,
+    EXTENDED_REALISTIC_SCENARIOS,
+    ORGANIZER_SCENARIOS,
+)
+from solver.exact_reference import certify_request
+from solver.reference_core import request_hash
 from solver.packer import SORT_KEYS
-from validator import evaluate_solution
+from validator import evaluate_packing_quality, evaluate_solution
 from solver.models import Pallet, Box, solution_to_dict
 from solver.solver import solve
-
-
-ORGANIZER_SCENARIOS = [
-    ("heavy_water", 42),
-    ("fragile_tower", 43),
-    ("liquid_tetris", 44),
-    ("random_mixed", 45),
-]
-
-PROJECT_SCENARIOS = [
-    ("exact_fit", 46),
-    ("fragile_mix", 47),
-    ("support_tetris", 48),
-    ("cavity_fill", 49),
-    ("count_preference", 50),
-]
-
-SCENARIOS = ORGANIZER_SCENARIOS + PROJECT_SCENARIOS
 
 
 def _request_to_models(request_dict: dict):
@@ -65,47 +55,106 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
+def _certificate_path(certificate_dir: str | None, request_dict: dict) -> Path | None:
+    if not certificate_dir:
+        return None
+    cert_dir = Path(certificate_dir)
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    return cert_dir / f"{request_hash(request_dict)}.json"
+
+
+def _load_certificate(certificate_dir: str | None, request_dict: dict) -> dict | None:
+    path = _certificate_path(certificate_dir, request_dict)
+    if path is None or not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _write_certificate(certificate_dir: str | None, request_dict: dict, certificate: dict) -> None:
+    path = _certificate_path(certificate_dir, request_dict)
+    if path is None:
+        return
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(certificate, file, indent=2, ensure_ascii=False)
+
+
+def run_benchmark(
+    n_restarts: int = 10,
+    time_budget_ms: int = 5000,
+    strategy: str = "portfolio_block",
+    model_dir: str = "models",
+    certificate_dir: str | None = None,
+) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
 
-    for scenario_type, seed in SCENARIOS:
+    for scenario_type, seed in BENCHMARK_SCENARIOS:
         request_dict = generate_scenario(
             f"bench_{scenario_type}", scenario_type, seed=seed
         )
         task_id, pallet, boxes = _request_to_models(request_dict)
 
-        t0 = time.perf_counter()
-        solution = solve(
-            task_id=task_id,
-            pallet=pallet,
-            boxes=boxes,
-            request_dict=request_dict,
-            n_restarts=n_restarts,
-            time_budget_ms=time_budget_ms,
-        )
-        wall_time_ms = int((time.perf_counter() - t0) * 1000)
+        certificate = None
+        if strategy == "exact_reference":
+            t0 = time.perf_counter()
+            certificate = certify_request(
+                request=request_dict,
+                model_dir=model_dir,
+                time_budget_ms=time_budget_ms,
+            )
+            wall_time_ms = int((time.perf_counter() - t0) * 1000)
+            _write_certificate(certificate_dir, request_dict, certificate)
+            response_dict = certificate["response"]
+        else:
+            t0 = time.perf_counter()
+            solution = solve(
+                task_id=task_id,
+                pallet=pallet,
+                boxes=boxes,
+                request_dict=request_dict,
+                n_restarts=n_restarts,
+                time_budget_ms=time_budget_ms,
+                model_dir=model_dir,
+                strategy=strategy,
+            )
+            wall_time_ms = int((time.perf_counter() - t0) * 1000)
+            response_dict = solution_to_dict(solution)
+            certificate = _load_certificate(certificate_dir, request_dict)
 
-        response_dict = solution_to_dict(solution)
         eval_result = evaluate_solution(request_dict, response_dict)
+        packing_result = evaluate_packing_quality(request_dict, response_dict)
 
         total_items = sum(b["quantity"] for b in request_dict["boxes"])
+        quality_gap = None
+        packing_score_ub = None
+        if certificate is not None:
+            packing_score_ub = certificate.get("packing_score_ub")
+            quality_gap = round(
+                max(0.0, packing_score_ub - packing_result.get("packing_score", 0.0)),
+                4,
+            )
 
         entry = {
             "scenario": scenario_type,
             "valid": eval_result.get("valid", False),
             "final_score": eval_result.get("final_score", 0.0),
             "metrics": eval_result.get("metrics", {}),
-            "constraint_checks": eval_result.get("constraint_checks", {}),
-            "placed": len(solution.placements),
+            "packing_score": packing_result.get("packing_score", 0.0),
+            "packing_score_ub": packing_score_ub,
+            "quality_gap": quality_gap,
+            "placed": len(response_dict.get("placements", [])),
             "total_items": total_items,
-            "solve_time_ms": solution.solve_time_ms,
+            "solve_time_ms": response_dict.get("wall_time_ms", wall_time_ms),
             "wall_time_ms": wall_time_ms,
+            "score_time_ms": response_dict.get("solve_time_ms", wall_time_ms),
+            "strategy": strategy,
             "error": eval_result.get("error"),
             "response": response_dict,
             "request_pallet": request_dict["pallet"],
             "request_boxes": request_dict["boxes"],
+            "certificate": certificate,
         }
         results.append(entry)
 
@@ -118,10 +167,10 @@ def format_markdown(results: list) -> str:
     def render_table(title: str, rows: list) -> list:
         section = [f"### {title}", ""]
         section.append(
-            "| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
+            "| Scenario | Final | Pack | Gap | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
         )
         section.append(
-            "|----------|-------|--------|----------|-----------|------------|--------|-----------|"
+            "|----------|-------|------|-----|--------|----------|-----------|------------|--------|-----------|"
         )
 
         total_score = 0.0
@@ -131,6 +180,8 @@ def format_markdown(results: list) -> str:
                 section.append(
                     f"| {r['scenario']} "
                     f"| **{r['final_score']:.4f}** "
+                    f"| {r.get('packing_score', 0):.4f} "
+                    f"| {r.get('quality_gap', '-') if r.get('quality_gap') is not None else '-'} "
                     f"| {m.get('volume_utilization', 0):.4f} "
                     f"| {m.get('item_coverage', 0):.4f} "
                     f"| {m.get('fragility_score', 0):.4f} "
@@ -143,7 +194,7 @@ def format_markdown(results: list) -> str:
                 section.append(
                     f"| {r['scenario']} "
                     f"| **INVALID** "
-                    f"| - | - | - | - "
+                    f"| - | - | - | - | - | - "
                     f"| {r['placed']}/{r['total_items']} "
                     f"| {r['solve_time_ms']} |"
                 )
@@ -155,11 +206,16 @@ def format_markdown(results: list) -> str:
         return section
 
     organizer_names = {name for name, _ in ORGANIZER_SCENARIOS}
+    extended_names = {name for name, _ in EXTENDED_REALISTIC_SCENARIOS}
+    diagnostic_names = {name for name, _ in DIAGNOSTIC_SCENARIOS}
+
     organizer_results = [r for r in results if r["scenario"] in organizer_names]
-    project_results = [r for r in results if r["scenario"] not in organizer_names]
+    extended_results = [r for r in results if r["scenario"] in extended_names]
+    diagnostic_results = [r for r in results if r["scenario"] in diagnostic_names]
 
     lines.extend(render_table("Сценарии организаторов", organizer_results))
-    lines.extend(render_table("Наши synthetic/diagnostic сценарии", project_results))
+    lines.extend(render_table("Расширенные реалистичные сценарии", extended_results))
+    lines.extend(render_table("Sanity и диагностические сценарии", diagnostic_results))
 
     overall_avg = (
         sum(r["final_score"] for r in results if r["valid"]) / len(results)
@@ -167,40 +223,6 @@ def format_markdown(results: list) -> str:
         else 0
     )
     lines.append(f"**Overall average: {overall_avg:.4f}**")
-
-    # Constraint compliance table
-    lines.append("")
-    lines.append("### Constraint Compliance")
-    lines.append("")
-    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
-    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
-    for r in results:
-        cc = r.get("constraint_checks", {})
-        if not r["valid"]:
-            lines.append(f"| {r['scenario']} | FAIL | - | - | - | - | - | - |")
-            continue
-
-        def _fmt(v):
-            if v is True:
-                return "PASS"
-            if v == "pass":
-                return "PASS"
-            if v == "n/a":
-                return "n/a"
-            return str(v)
-
-        lines.append(
-            f"| {r['scenario']} "
-            f"| {_fmt(cc.get('bounds', '?'))} "
-            f"| {_fmt(cc.get('no_collision', '?'))} "
-            f"| {_fmt(cc.get('support_60pct', '?'))} "
-            f"| {_fmt(cc.get('weight_limit', '?'))} "
-            f"| {_fmt(cc.get('strict_upright', '?'))} "
-            f"| {_fmt(cc.get('stackable', '?'))} "
-            f"| {cc.get('fragility_violations', '?')} |"
-        )
-    lines.append("")
-
     return "\n".join(lines)
 
 
@@ -253,9 +275,30 @@ def main():
     parser.add_argument(
         "--viz", default=None, help="Generate 3D visualization HTML files to directory"
     )
+    parser.add_argument(
+        "--certificate-dir",
+        default=None,
+        help="Directory for exact-reference certificates; exact runs write there and non-exact runs read from there when available.",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="portfolio_block",
+        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy", "exact_reference"],
+        help="Runtime strategy to benchmark",
+    )
+    parser.add_argument(
+        "--model-dir",
+        default="models",
+        help="Directory with optional selector or ranker artifacts",
+    )
     args = parser.parse_args()
 
-    results = run_benchmark(n_restarts=args.restarts)
+    results = run_benchmark(
+        n_restarts=args.restarts,
+        strategy=args.strategy,
+        model_dir=args.model_dir,
+        certificate_dir=args.certificate_dir,
+    )
     md = format_markdown(results)
     print(md)
 
@@ -265,7 +308,7 @@ def main():
             {
                 k: v
                 for k, v in r.items()
-                if k not in ("response", "request_pallet", "request_boxes")
+                if k not in ("response", "request_pallet", "request_boxes", "certificate")
             }
             for r in results
         ]

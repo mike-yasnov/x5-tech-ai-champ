@@ -20,10 +20,12 @@
 │   ├── __init__.py
 │   ├── models.py          # Модели данных: Box, Pallet, Placement, Solution
 │   ├── orientations.py    # Генерация допустимых ориентаций (strict_upright)
-│   ├── pallet_state.py    # Состояние паллеты: Extreme Points, проверки
-│   ├── scoring.py         # Scoring-функция для ранжирования кандидатов
-│   ├── packer.py          # Greedy packer: основной цикл размещения
-│   ├── solver.py          # Multi-restart обёртка
+│   ├── pallet_state.py    # Baseline-состояние паллеты для unit-тестов и сравнения
+│   ├── scoring.py         # Baseline scoring-функция
+│   ├── packer.py          # Baseline greedy packer
+│   ├── solver.py          # Публичный entrypoint: адаптер к hybrid solver
+│   ├── hybrid/            # Legacy hybrid beam search + postprocess
+│   ├── portfolio_block.py # Default solver: block portfolio + optional ranker
 │   ├── cli.py             # CLI-интерфейс
 │   └── __main__.py        # Запуск через python -m solver
 ├── tests/                 # Тесты
@@ -80,10 +82,11 @@ git checkout -b my-improvement
 
 | Файл | Что менять |
 |------|-----------|
-| `solver/scoring.py` | Веса и компоненты scoring-функции |
-| `solver/packer.py` | Алгоритм упаковки, стратегии сортировки |
-| `solver/solver.py` | Multi-restart логика, параметры |
-| `solver/pallet_state.py` | Extreme Points, проверки, новые предикаты |
+| `solver/portfolio_block.py` | Default solver: block portfolio, repair, optional ranking |
+| `solver/hybrid/pipeline.py` | Legacy hybrid solver и параметры поиска |
+| `solver/hybrid/search.py` | Beam search / greedy fallback и ranking |
+| `solver/hybrid/postprocess.py` | Уплотнение, fragile reorder, дозаполнение |
+| `solver/solver.py` | Публичный API и адаптер dataclass <-> request/response |
 
 ### 3. Проверить локально
 
@@ -121,6 +124,7 @@ git push -u origin my-improvement
 | 3 | Опора ≥ 60% площади | Support area calculation |
 | 4 | strict_upright → только Z-ось вращения | Orientation filter |
 | 5 | Вес ≤ max_weight_kg | Weight accumulator |
+| 6 | Нельзя ставить сверху на `stackable: false` | Stackable-below check |
 
 ## Scoring
 
@@ -194,7 +198,7 @@ final_score = 0.50 × volume_utilization
 
 </details>
 
-## Baseline Benchmark (отправная точка)
+## Legacy Baseline Benchmark
 
 | Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
 |----------|-------|--------|----------|-----------|------------|--------|-----------|
@@ -204,24 +208,47 @@ final_score = 0.50 × volume_utilization
 | random_mixed | **0.7023** | 0.8198 | 0.4579 | 0.5500 | 1.0000 | 49/107 | 112 |
 | **Average** | **0.6879** | | | | | | |
 
-> Дата: 2026-03-14. Solver v1.0.0, greedy + multi-restart (5 стратегий), budget 900ms.
+> Дата: 2026-03-14. Это baseline-замер для greedy + multi-restart v1.0.0. Текущий default solver в репозитории использует `portfolio_block`, а legacy hybrid сохранён как отдельная стратегия.
 
-## Архитектура baseline-солвера
+## Архитектура текущего default-солвера
 
-**Extreme Points + Greedy + Multi-restart**
+**Auto Portfolio V2: deterministic seed search + local order search + optional selector**
 
-1. **Extreme Points** — генерация кандидатных позиций (не полный перебор x,y,z)
-2. **Greedy packer** — для каждого короба выбирает лучшую позицию × ориентацию по scoring-функции
-3. **Multi-restart** — прогоняет 5 стратегий сортировки, выбирает лучший скор
+1. **Scenario fingerprint** — считаем request-level признаки: число SKU, доля хрупких, weight ratio, volume ratio, max SKU share и т.д.
+2. **Seed portfolio** — запускаем только top-3 быстрых seed-family:
+   - `heavy_base`
+   - `liquid_fill`
+   - `mixed_volume`
+   - `fragile_density`
+   - `block_structured`
+   - `coverage_tie`
+3. **Local order search** — для лучшего greedy seed переставляем первые SKU в очереди и переоцениваем только несколько front-priority вариантов.
+4. **Repair + Postprocess** — remove-and-refill repair, compact-downward, fragile reorder, повторная вставка unplaced.
+5. **Optional selector** — маленький XGBoost classifier в `models/selector_xgb.json` может переупорядочить seed-family по request fingerprint, но fallback-эвристика остаётся основным safety net.
 
-Стратегии сортировки: `volume_desc`, `weight_desc`, `base_area_desc`, `density_desc`, `constrained_first`
+Baseline greedy-модули (`solver/packer.py`, `solver/scoring.py`, `solver/pallet_state.py`) и legacy hybrid сохранены для unit-тестов и сравнительных бенчмарков. Optional block ranker сохранён только для offline-экспериментов и не включён в runtime по умолчанию.
+
+## Selector Workflow
+
+```bash
+# Собрать request-level датасет
+python collect_selector_data.py --output selector_train.npz --seed-start 1000 --seed-end 1010
+python collect_selector_data.py --output selector_val.npz --seed-start 1500 --seed-end 1505
+
+# Обучить selector
+python train_selector.py --train selector_train.npz --val selector_val.npz --model-dir models
+
+# Проверить held-out accuracy и benchmark with/without selector
+python evaluate_selector.py --dataset selector_val.npz --model-dir models --markdown-output docs/selector_report.md
+```
 
 ## Направления улучшений
 
-- [ ] Beam search вместо greedy (ширина луча = качество vs скорость)
+- [x] Beam search вместо greedy
+- [x] Учёт `stackable: false` в валидаторе
+- [x] Scenario-level selector для seed ranking
 - [ ] Layer-based packing (укладка слоями)
 - [ ] LNS (Large Neighborhood Search) — локальный поиск с перестроением
-- [ ] Тюнинг весов scoring-функции
-- [ ] Больше стратегий сортировки для multi-restart
-- [ ] Учёт `stackable: false` в валидаторе
+- [ ] Тюнинг эвристики / HYB ranking
+- [ ] Больше стратегий для postprocess и локального улучшения
 - [ ] 3D-визуализация (plotly/matplotlib)

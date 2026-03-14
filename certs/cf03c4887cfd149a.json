@@ -1,0 +1,396 @@
+{
+  "request_hash": "cf03c4887cfd149a",
+  "task_id": "bench_support_tetris",
+  "strategy": "exact_reference",
+  "stage": "general_exact_search",
+  "packing_score_lb": 0.8571,
+  "packing_score_ub": 0.8571,
+  "gap": 0.0,
+  "proven_optimal": true,
+  "eps_optimal": true,
+  "wall_time_ms": 1021,
+  "solver_version": "exact-reference-v0.1",
+  "notes": "Exhaustive support-point search for compact requests.",
+  "metrics": {
+    "volume_utilization": 1.0,
+    "item_coverage": 0.8571,
+    "fragility_score": 1.0,
+    "packing_score": 0.8571
+  },
+  "placements": [
+    {
+      "sku_id": "SKU-LARGE",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 400,
+        "width_mm": 800,
+        "height_mm": 200
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-LARGE",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 400,
+        "y_mm": 0,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 800,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-LARGE",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 400,
+        "y_mm": 400,
+        "z_mm": 0
+      },
+      "dimensions_placed": {
+        "length_mm": 800,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-LARGE",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 400,
+        "width_mm": 800,
+        "height_mm": 200
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 0,
+      "position": {
+        "x_mm": 400,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 200,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 1,
+      "position": {
+        "x_mm": 400,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 200,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 2,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 400,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 3,
+      "position": {
+        "x_mm": 1000,
+        "y_mm": 0,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 200,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 4,
+      "position": {
+        "x_mm": 1000,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 200,
+        "width_mm": 400,
+        "height_mm": 200
+      },
+      "rotation_code": "WLH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 5,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 200,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 400,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 6,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 400,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 400,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    },
+    {
+      "sku_id": "SKU-MEDIUM",
+      "instance_index": 7,
+      "position": {
+        "x_mm": 600,
+        "y_mm": 600,
+        "z_mm": 200
+      },
+      "dimensions_placed": {
+        "length_mm": 400,
+        "width_mm": 200,
+        "height_mm": 200
+      },
+      "rotation_code": "LWH"
+    }
+  ],
+  "response": {
+    "task_id": "bench_support_tetris",
+    "solver_version": "exact-reference-v0.1",
+    "solve_time_ms": 1021,
+    "placements": [
+      {
+        "sku_id": "SKU-LARGE",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 400,
+          "width_mm": 800,
+          "height_mm": 200
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-LARGE",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 400,
+          "y_mm": 0,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 800,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-LARGE",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 400,
+          "y_mm": 400,
+          "z_mm": 0
+        },
+        "dimensions_placed": {
+          "length_mm": 800,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-LARGE",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 0,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 400,
+          "width_mm": 800,
+          "height_mm": 200
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 0,
+        "position": {
+          "x_mm": 400,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 200,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 1,
+        "position": {
+          "x_mm": 400,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 200,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 2,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 400,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 3,
+        "position": {
+          "x_mm": 1000,
+          "y_mm": 0,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 200,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 4,
+        "position": {
+          "x_mm": 1000,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 200,
+          "width_mm": 400,
+          "height_mm": 200
+        },
+        "rotation_code": "WLH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 5,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 200,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 400,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 6,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 400,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 400,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      },
+      {
+        "sku_id": "SKU-MEDIUM",
+        "instance_index": 7,
+        "position": {
+          "x_mm": 600,
+          "y_mm": 600,
+          "z_mm": 200
+        },
+        "dimensions_placed": {
+          "length_mm": 400,
+          "width_mm": 200,
+          "height_mm": 200
+        },
+        "rotation_code": "LWH"
+      }
+    ],
+    "unplaced": [
+      {
+        "sku_id": "SKU-MEDIUM",
+        "quantity_unplaced": 2,
+        "reason": "height_limit_exceeded"
+      }
+    ]
+  }
+}

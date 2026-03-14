@@ -1,0 +1,93 @@
+{
+  "feature_version": 1,
+  "model_type": "xgb_selector",
+  "train_meta": {
+    "families": [
+      "heavy_water",
+      "fragile_tower",
+      "liquid_tetris",
+      "random_mixed",
+      "exact_fit",
+      "fragile_mix",
+      "support_tetris",
+      "cavity_fill",
+      "count_preference",
+      "weight_limited_repeat",
+      "fragile_cap_mix",
+      "mixed_column_repeat",
+      "small_gap_fill"
+    ],
+    "seed_start": 1000,
+    "seed_end": 1010,
+    "rows": 130,
+    "feature_dim": 10,
+    "seed_families": [
+      "heavy_base",
+      "liquid_fill",
+      "mixed_volume",
+      "fragile_density",
+      "block_structured",
+      "coverage_tie"
+    ],
+    "label_mapping": {
+      "heavy_base": 0,
+      "liquid_fill": 1,
+      "mixed_volume": 2,
+      "fragile_density": 3,
+      "block_structured": 4,
+      "coverage_tie": 5
+    }
+  },
+  "val_meta": {
+    "families": [
+      "heavy_water",
+      "fragile_tower",
+      "liquid_tetris",
+      "random_mixed",
+      "exact_fit",
+      "fragile_mix",
+      "support_tetris",
+      "cavity_fill",
+      "count_preference",
+      "weight_limited_repeat",
+      "fragile_cap_mix",
+      "mixed_column_repeat",
+      "small_gap_fill"
+    ],
+    "seed_start": 1500,
+    "seed_end": 1505,
+    "rows": 65,
+    "feature_dim": 10,
+    "seed_families": [
+      "heavy_base",
+      "liquid_fill",
+      "mixed_volume",
+      "fragile_density",
+      "block_structured",
+      "coverage_tie"
+    ],
+    "label_mapping": {
+      "heavy_base": 0,
+      "liquid_fill": 1,
+      "mixed_volume": 2,
+      "fragile_density": 3,
+      "block_structured": 4,
+      "coverage_tie": 5
+    }
+  },
+  "metrics": {
+    "train_rows": 130,
+    "train_top1_accuracy": 1.0,
+    "val_top1_accuracy": 0.7230769230769231
+  },
+  "train_score_mean": 0.8275346159934998,
+  "val_score_mean": 0.8151353597640991,
+  "seed_families": [
+    "heavy_base",
+    "liquid_fill",
+    "mixed_volume",
+    "fragile_density",
+    "block_structured",
+    "coverage_tie"
+  ]
+}
