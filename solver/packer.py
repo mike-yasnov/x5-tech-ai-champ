@@ -75,6 +75,9 @@ class _LayerPattern:
     dy: int
     height: int
     kind: str
+    item_count: int
+    constrained_count: int
+    volume: int
 
 
 # ── Expand boxes ────────────────────────────────────────────────────
@@ -189,6 +192,10 @@ def _repeat_options(max_repeat: int) -> List[int]:
         values.add(max(1, int(round(max_repeat * 0.66))))
     if max_repeat >= 4:
         values.add(max_repeat - 1)
+    if max_repeat >= 6:
+        values.add(max(2, int(round(max_repeat * 0.33))))
+    if max_repeat >= 8:
+        values.add(max_repeat - 2)
     return sorted(v for v in values if 1 <= v <= max_repeat)
 
 
@@ -243,6 +250,42 @@ def _build_layer_patterns(
         orienteds.extend(_layer_orientations(box))
 
     patterns: Dict[Tuple[Tuple[Tuple[str, str, int], ...], int, int, int], _LayerPattern] = {}
+
+    def add_pattern(
+        sequence: Tuple[Tuple[_LayerOriented, int], ...],
+        dx: int,
+        dy: int,
+        height: int,
+        kind: str,
+    ) -> None:
+        item_count = sum(count for _, count in sequence)
+        constrained_count = sum(
+            count
+            for oriented, count in sequence
+            if oriented.box.fragile or not oriented.box.stackable
+        )
+        volume = sum(oriented.box.volume * count for oriented, count in sequence)
+        pattern = _LayerPattern(
+            sequence=sequence,
+            dx=dx,
+            dy=dy,
+            height=height,
+            kind=kind,
+            item_count=item_count,
+            constrained_count=constrained_count,
+            volume=volume,
+        )
+        key = (
+            tuple(
+                (entry.box.sku_id, entry.rotation_code, count)
+                for entry, count in pattern.sequence
+            ),
+            pattern.dx,
+            pattern.dy,
+            pattern.height,
+        )
+        patterns[key] = pattern
+
     for oriented in orienteds:
         max_repeat = 1
         if oriented.box.stackable and (
@@ -251,44 +294,27 @@ def _build_layer_patterns(
             max_repeat = min(
                 oriented.box.quantity,
                 pallet.max_height_mm // max(oriented.dz, 1),
-                12,
             )
         for repeat in _repeat_options(max_repeat):
-            pattern = _LayerPattern(
+            add_pattern(
                 sequence=((oriented, repeat),),
                 dx=oriented.dx,
                 dy=oriented.dy,
                 height=repeat * oriented.dz,
                 kind="support",
             )
-            key = (
-                tuple(
-                    (entry.box.sku_id, entry.rotation_code, count)
-                    for entry, count in pattern.sequence
-                ),
-                pattern.dx,
-                pattern.dy,
-                pattern.height,
-            )
-            patterns[key] = pattern
 
     tops = [o for o in orienteds if o.box.fragile or not o.box.stackable]
     supports = [o for o in orienteds if o.box.stackable]
+    mixed_supports = [o for o in supports if not o.box.fragile]
     for top in tops:
-        pattern = _LayerPattern(
+        add_pattern(
             sequence=((top, 1),),
             dx=top.dx,
             dy=top.dy,
             height=top.dz,
             kind="top",
         )
-        key = (
-            ((top.box.sku_id, top.rotation_code, 1),),
-            pattern.dx,
-            pattern.dy,
-            pattern.height,
-        )
-        patterns[key] = pattern
 
         for support in supports:
             if top.dx > support.dx or top.dy > support.dy:
@@ -298,30 +324,125 @@ def _build_layer_patterns(
             max_repeat = min(
                 support.box.quantity,
                 (pallet.max_height_mm - top.dz) // max(support.dz, 1),
-                12,
             )
             if support.box.weight_kg > 2.0 and support.box.fragile:
                 max_repeat = min(max_repeat, 1)
             for repeat in _repeat_options(max_repeat):
-                pattern = _LayerPattern(
+                add_pattern(
                     sequence=((support, repeat), (top, 1)),
                     dx=support.dx,
                     dy=support.dy,
                     height=repeat * support.dz + top.dz,
                     kind="top_support",
                 )
-                key = (
-                    tuple(
-                        (entry.box.sku_id, entry.rotation_code, count)
-                        for entry, count in pattern.sequence
-                    ),
-                    pattern.dx,
-                    pattern.dy,
-                    pattern.height,
+
+    for lower in mixed_supports:
+        max_lower = min(
+            lower.box.quantity,
+            pallet.max_height_mm // max(lower.dz, 1),
+        )
+        for lower_repeat in _repeat_options(max_lower):
+            lower_height = lower_repeat * lower.dz
+            for upper in mixed_supports:
+                if (
+                    upper.box.sku_id == lower.box.sku_id
+                    and upper.rotation_code == lower.rotation_code
+                ):
+                    continue
+                if upper.dx > lower.dx or upper.dy > lower.dy:
+                    continue
+                if (
+                    upper.box.weight_kg > 2.0
+                    and not upper.box.fragile
+                    and lower.box.fragile
+                ):
+                    continue
+                max_upper = min(
+                    upper.box.quantity,
+                    (pallet.max_height_mm - lower_height) // max(upper.dz, 1),
                 )
-                patterns[key] = pattern
+                if max_upper <= 0:
+                    continue
+                for upper_repeat in _repeat_options(max_upper):
+                    upper_height = lower_height + upper_repeat * upper.dz
+                    add_pattern(
+                        sequence=((lower, lower_repeat), (upper, upper_repeat)),
+                        dx=lower.dx,
+                        dy=lower.dy,
+                        height=upper_height,
+                        kind="support_mix",
+                    )
+                    for top in tops:
+                        if top.dx > upper.dx or top.dy > upper.dy:
+                            continue
+                        if (
+                            top.box.weight_kg > 2.0
+                            and not top.box.fragile
+                            and upper.box.fragile
+                        ):
+                            continue
+                        if upper_height + top.dz > pallet.max_height_mm:
+                            continue
+                        add_pattern(
+                            sequence=((lower, lower_repeat), (upper, upper_repeat), (top, 1)),
+                            dx=lower.dx,
+                            dy=lower.dy,
+                            height=upper_height + top.dz,
+                            kind="mixed_top_support",
+                        )
 
     return list(patterns.values())
+
+
+def _layer_state_value(
+    placed_volume: int,
+    placed_items: int,
+    placed_constrained: int,
+    used_area: int,
+    pallet: Pallet,
+    total_items: int,
+    total_constrained: int,
+) -> float:
+    vol_norm = placed_volume / max(
+        pallet.length_mm * pallet.width_mm * pallet.max_height_mm, 1
+    )
+    cov_norm = placed_items / max(total_items, 1)
+    constrained_norm = placed_constrained / max(total_constrained, 1)
+    area_norm = used_area / max(pallet.length_mm * pallet.width_mm, 1)
+    return (
+        vol_norm * 0.52
+        + cov_norm * 0.28
+        + constrained_norm * 0.14
+        + area_norm * 0.06
+    )
+
+
+def _select_layer_branches(
+    candidates: List[Tuple[float, _LayerPattern, int, int]],
+    branch_width: int,
+) -> List[Tuple[float, _LayerPattern, int, int]]:
+    if len(candidates) <= branch_width:
+        return sorted(candidates, key=lambda item: item[0], reverse=True)
+
+    buckets: Dict[str, List[Tuple[float, _LayerPattern, int, int]]] = defaultdict(list)
+    for candidate in candidates:
+        buckets[candidate[1].kind].append(candidate)
+    for kind in buckets:
+        buckets[kind].sort(key=lambda item: item[0], reverse=True)
+
+    selected: List[Tuple[float, _LayerPattern, int, int]] = []
+    for kind in ("mixed_top_support", "top_support", "top", "support_mix", "support"):
+        if kind in buckets and buckets[kind]:
+            selected.append(buckets[kind].pop(0))
+            if len(selected) >= branch_width:
+                return selected[:branch_width]
+
+    leftovers = []
+    for bucket in buckets.values():
+        leftovers.extend(bucket)
+    leftovers.sort(key=lambda item: item[0], reverse=True)
+    selected.extend(leftovers[: max(0, branch_width - len(selected))])
+    return selected[:branch_width]
 
 
 def pack_upright_layered(
@@ -345,9 +466,12 @@ def pack_upright_layered(
 
     patterns = _build_layer_patterns(pallet, boxes)
     remaining0 = {box.sku_id: box.quantity for box in boxes}
+    volume0 = {box.sku_id: box.volume for box in boxes}
     constrained_skus = {
         box.sku_id for box in boxes if box.fragile or not box.stackable
     }
+    total_items = sum(remaining0.values())
+    total_constrained = sum(remaining0[sku] for sku in constrained_skus)
     deadline = t0 + max(time_budget_ms, 1) / 1000.0
 
     # (rects, eps, remaining, chosen_patterns)
@@ -360,7 +484,7 @@ def pack_upright_layered(
         ]
     ] = [(tuple(), ((0, 0),), remaining0, [])]
     best_state = beam[0]
-    best_placed = 0
+    best_value = -1.0
 
     for _ in range(32):
         if time.perf_counter() >= deadline:
@@ -368,17 +492,29 @@ def pack_upright_layered(
         next_states = []
         for rects, eps, remaining, chosen in beam:
             placed = sum(remaining0[sku] - remaining[sku] for sku in remaining0)
-            if placed > best_placed:
-                best_placed = placed
+            placed_volume = sum(
+                (remaining0[sku] - remaining[sku]) * volume0[sku]
+                for sku in remaining0
+            )
+            rem_constrained = sum(remaining[sku] for sku in constrained_skus)
+            placed_constrained = total_constrained - rem_constrained
+            used_area = sum(rdx * rdy for _, _, rdx, rdy in rects)
+            state_value = _layer_state_value(
+                placed_volume=placed_volume,
+                placed_items=placed,
+                placed_constrained=placed_constrained,
+                used_area=used_area,
+                pallet=pallet,
+                total_items=total_items,
+                total_constrained=total_constrained,
+            )
+            if state_value > best_value:
+                best_value = state_value
                 best_state = (rects, eps, remaining, chosen)
 
-            rem_constrained = sum(remaining[sku] for sku in constrained_skus)
             candidates = []
             for pattern in patterns:
                 need: Dict[str, int] = {}
-                items = 0
-                constrained_items = 0
-                volume = 0
                 feasible_pattern = True
                 for oriented, count in pattern.sequence:
                     sku_id = oriented.box.sku_id
@@ -386,10 +522,6 @@ def pack_upright_layered(
                     if need[sku_id] > remaining.get(sku_id, 0):
                         feasible_pattern = False
                         break
-                    items += count
-                    volume += oriented.box.volume * count
-                    if sku_id in constrained_skus:
-                        constrained_items += count
                 if not feasible_pattern:
                     continue
 
@@ -397,21 +529,31 @@ def pack_upright_layered(
                     if not _fits_rect(rects, pattern.dx, pattern.dy, x, y, pallet):
                         continue
                     footprint = pattern.dx * pattern.dy
-                    height_eff = volume / max(footprint * pattern.height, 1)
+                    height_eff = pattern.volume / max(footprint * pattern.height, 1)
+                    gain_score = _layer_state_value(
+                        placed_volume=pattern.volume,
+                        placed_items=pattern.item_count,
+                        placed_constrained=pattern.constrained_count,
+                        used_area=footprint,
+                        pallet=pallet,
+                        total_items=total_items,
+                        total_constrained=max(total_constrained, 1),
+                    )
                     score = (
-                        items * 4.0
-                        + constrained_items * 8.0
-                        + height_eff * 18.0
-                        + (1.0 if pattern.kind == "top_support" else 0.0)
+                        gain_score * 100.0
+                        + pattern.constrained_count * 3.5
+                        + height_eff * 14.0
+                        + (1.4 if pattern.kind in {"top_support", "mixed_top_support"} else 0.0)
+                        + (0.5 if pattern.kind == "support_mix" else 0.0)
                         + (1.0 if x == 0 else 0.0)
                         + (1.0 if y == 0 else 0.0)
                         - pattern.height / 20000.0
                     )
-                    if rem_constrained and constrained_items == 0 and items <= 2:
-                        score -= 4.0
+                    if rem_constrained and pattern.constrained_count == 0:
+                        score -= 5.0 if pattern.item_count <= 2 else 2.0
                     candidates.append((score, pattern, x, y))
 
-            for _, pattern, x, y in nlargest(branch_width, candidates, key=lambda item: item[0]):
+            for _, pattern, x, y in _select_layer_branches(candidates, branch_width):
                 rect = (x, y, pattern.dx, pattern.dy)
                 new_rects = tuple(sorted(rects + (rect,)))
                 new_remaining = dict(remaining)
@@ -443,18 +585,53 @@ def pack_upright_layered(
             rects, eps, remaining, chosen = state
             placed = sum(remaining0[sku] - remaining[sku] for sku in remaining0)
             rem_constrained = sum(remaining[sku] for sku in constrained_skus)
+            placed_volume = sum(
+                (remaining0[sku] - remaining[sku]) * volume0[sku]
+                for sku in remaining0
+            )
+            placed_constrained = total_constrained - rem_constrained
             used_area = sum(rdx * rdy for _, _, rdx, rdy in rects)
             key = (rects, tuple(sorted(remaining.items())))
-            value = ((placed, -rem_constrained, -used_area), state)
+            value = (
+                (
+                    _layer_state_value(
+                        placed_volume=placed_volume,
+                        placed_items=placed,
+                        placed_constrained=placed_constrained,
+                        used_area=used_area,
+                        pallet=pallet,
+                        total_items=total_items,
+                        total_constrained=total_constrained,
+                    ),
+                    placed_volume,
+                    placed,
+                    -rem_constrained,
+                    -used_area,
+                ),
+                state,
+            )
             if key not in deduped or value[0] > deduped[key][0]:
                 deduped[key] = value
 
         pruned = [value[1] for value in deduped.values()]
         pruned.sort(
             key=lambda state: (
+                _layer_state_value(
+                    placed_volume=sum(
+                        (remaining0[sku] - state[2][sku]) * volume0[sku]
+                        for sku in remaining0
+                    ),
+                    placed_items=sum(remaining0[sku] - state[2][sku] for sku in remaining0),
+                    placed_constrained=total_constrained - sum(
+                        state[2][sku] for sku in constrained_skus
+                    ),
+                    used_area=sum(rdx * rdy for _, _, rdx, rdy in state[0]),
+                    pallet=pallet,
+                    total_items=total_items,
+                    total_constrained=total_constrained,
+                ),
+                sum((remaining0[sku] - state[2][sku]) * volume0[sku] for sku in remaining0),
                 sum(remaining0[sku] - state[2][sku] for sku in remaining0),
-                -sum(state[2][sku] for sku in constrained_skus),
-                -sum(rdx * rdy for _, _, rdx, rdy in state[0]),
             ),
             reverse=True,
         )
