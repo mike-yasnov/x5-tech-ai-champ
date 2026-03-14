@@ -169,6 +169,15 @@ def pack_ordered_boxes(
     return _pack_instances(task_id, pallet, instances, label)
 
 
+def pack_instance_sequence(
+    task_id: str,
+    pallet: Pallet,
+    instances: List[Tuple[Box, int]],
+    label: str = "custom_sequence",
+) -> Solution:
+    return _pack_instances(task_id, pallet, instances, label)
+
+
 # ── Greedy packer ───────────────────────────────────────────────────
 
 def pack_greedy(
