@@ -124,6 +124,10 @@ def _run_strategies_sequential(
     best_score = -1.0
     best_key = ""
     estimated_time_per_strategy = 0.0
+    # Track best fragile-safe solution (0 violations) as alternative candidate
+    best_fragile_safe = None
+    best_fragile_safe_score = -1.0
+    best_fragile_safe_key = ""
 
     for i in range(n_to_run):
         elapsed = (time.perf_counter() - t0) * 1000
@@ -166,12 +170,22 @@ def _run_strategies_sequential(
             best_solution = solution
             best_key = key_name
 
-    return best_solution, best_score, best_key
+        # Track best fragile-safe solution (might win after postprocess fixes violations)
+        if score > best_fragile_safe_score:
+            from .postprocess import _find_fragility_violations
+            bm = {b.sku_id: b for b in boxes}
+            v = len(_find_fragility_violations(list(solution.placements), bm))
+            if v == 0:
+                best_fragile_safe_score = score
+                best_fragile_safe = solution
+                best_fragile_safe_key = key_name
+
+    return best_solution, best_score, best_key, best_fragile_safe, best_fragile_safe_score, best_fragile_safe_key
 
 
 def _run_strategies_parallel(
     task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
-) -> Tuple[Optional[Solution], float, str]:
+):
     """Run strategies in parallel using ProcessPoolExecutor."""
     from concurrent.futures import ProcessPoolExecutor, as_completed
     import multiprocessing
@@ -179,6 +193,10 @@ def _run_strategies_parallel(
     best_solution = None
     best_score = -1.0
     best_key = ""
+    best_fragile_safe = None
+    best_fragile_safe_score = -1.0
+    best_fragile_safe_key = ""
+    boxes_meta = {b.sku_id: b for b in boxes}
 
     # Prepare args (no request_dict — workers use proxy score)
     args_list = [
@@ -233,6 +251,15 @@ def _run_strategies_parallel(
                     best_solution = solution
                     best_key = key_name
 
+                # Track fragile-safe candidate
+                if score > best_fragile_safe_score:
+                    from .postprocess import _find_fragility_violations
+                    v = len(_find_fragility_violations(list(solution.placements), boxes_meta))
+                    if v == 0:
+                        best_fragile_safe_score = score
+                        best_fragile_safe = solution
+                        best_fragile_safe_key = key_name
+
             # Check wall-clock budget before submitting more
             elapsed = (time.perf_counter() - t0) * 1000
             if elapsed > strategy_budget_ms:
@@ -247,7 +274,7 @@ def _run_strategies_parallel(
 
     logger.info("[solve] parallel done: %d strategies completed, best_score=%.4f best_key=%s",
                 completed, best_score, best_key)
-    return best_solution, best_score, best_key
+    return best_solution, best_score, best_key, best_fragile_safe, best_fragile_safe_score, best_fragile_safe_key
 
 
 def solve(
@@ -302,14 +329,19 @@ def solve(
         (sort_key_names[1], "default", "greedy"),        # base_area_desc
         (sort_key_names[2], "default", "greedy"),        # fragile_last
         (sort_key_names[3], "default", "greedy"),        # volume_desc
-        (sort_key_names[4], "default", "greedy"),        # volume_asc
+        # Fragile-aware with fill_heavy (top performers for mixed fragile scenarios)
+        ("heavy_base_fragile_top", "fill_heavy", "greedy"),
+        (sort_key_names[2], "fill_heavy", "greedy"),           # fragile_last + fill_heavy
         # Key alternative profiles (proven winners)
-        (sort_key_names[1], "contact_heavy", "greedy"),  # base_area_desc + contact
         (sort_key_names[2], "contact_heavy", "greedy"),  # fragile_last + contact → 84/84 liquid_tetris
         (sort_key_names[6], "contact_heavy", "greedy"),  # non_stackable_last + contact → also 84/84
+        (sort_key_names[4], "default", "greedy"),        # volume_asc
+        (sort_key_names[1], "contact_heavy", "greedy"),  # base_area_desc + contact
         (sort_key_names[3], "fill_heavy", "greedy"),     # volume_desc + fill
         (sort_key_names[0], "contact_heavy", "greedy"),  # constrained_first + contact
-        # Fragile-strict strategies (moved early for fragile-heavy scenarios)
+        # More fragile strategies
+        ("stackable_base", "fill_heavy", "greedy"),
+        # Fragile-strict strategies (hard-block violations)
         (sort_key_names[2], "fragile_strict", "greedy"),       # fragile_last + fragile_strict
         ("heavy_base_fragile_top", "fragile_strict", "greedy"),
         (sort_key_names[2], "fragile_strict", "two_phase"),    # fragile_last + fragile_strict two-phase
@@ -330,7 +362,6 @@ def solve(
         (sort_key_names[8], "default", "greedy"),        # weight_desc
         (sort_key_names[9], "default", "greedy"),        # max_dim_desc
         # More alternatives
-        (sort_key_names[2], "fill_heavy", "greedy"),
         (sort_key_names[1], "contact_heavy", "two_phase"),
         # Fragile-avoid strategies
         (sort_key_names[2], "fragile_avoid", "greedy"),       # fragile_last + fragile_avoid
@@ -364,18 +395,21 @@ def solve(
     # Wall-clock budget: ~40% strategies, rest for LNS + postprocessing
     strategy_budget_ms = time_budget_ms * 0.40
 
+    fragile_safe_solution = None
+    fragile_safe_score = -1.0
+    fragile_safe_key = ""
     if N_WORKERS > 1:
         try:
-            best_solution, best_score, best_key = _run_strategies_parallel(
+            best_solution, best_score, best_key, fragile_safe_solution, fragile_safe_score, fragile_safe_key = _run_strategies_parallel(
                 task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
             )
         except Exception as e:
             logger.warning("[solve] parallel execution failed, falling back to sequential: %s", e)
-            best_solution, best_score, best_key = _run_strategies_sequential(
+            best_solution, best_score, best_key, fragile_safe_solution, fragile_safe_score, fragile_safe_key = _run_strategies_sequential(
                 task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
             )
     else:
-        best_solution, best_score, best_key = _run_strategies_sequential(
+        best_solution, best_score, best_key, fragile_safe_solution, fragile_safe_score, fragile_safe_key = _run_strategies_sequential(
             task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
         )
 
@@ -430,6 +464,8 @@ def solve(
         try:
             from .postprocess import postprocess_solution
             logger.info("[solve] postprocess: budget=%dms elapsed=%.0fms", pp_budget, elapsed_so_far)
+
+            # Postprocess main solution
             pp_solution = postprocess_solution(
                 task_id, pallet, boxes, best_solution,
                 time_budget_ms=pp_budget,
@@ -446,6 +482,17 @@ def solve(
                 best_key = f"pp_{best_key}"
             else:
                 logger.debug("[solve] postprocess no improvement: %.4f vs %.4f", pp_score, best_score)
+
+            # Compare fragile-safe candidate (raw, no postprocess to avoid creating violations)
+            if (fragile_safe_solution is not None
+                    and fragile_safe_solution is not best_solution):
+                fs_score = _fast_score(pallet, boxes, fragile_safe_solution)
+                logger.info("[solve] fragile-safe candidate: %.4f (vs best %.4f)", fs_score, best_score)
+                if fs_score > best_score:
+                    logger.info("[solve] fragile-safe candidate wins: %.4f > %.4f", fs_score, best_score)
+                    best_score = fs_score
+                    best_solution = fragile_safe_solution
+                    best_key = f"fs_{fragile_safe_key}"
         except Exception as e:
             logger.warning("[solve] postprocess failed: %s", e)
 

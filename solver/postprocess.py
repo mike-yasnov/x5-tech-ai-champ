@@ -276,6 +276,12 @@ def try_insert_unplaced(
                     box.weight_kg, box.fragile,
                     weight_profile=weight_profile,
                 )
+                # Penalize creating new fragile violations during insert
+                if box.weight_kg > 2.0 and ez > 0:
+                    fragile_below = state.get_fragile_boxes_at_top(
+                        ez, ex, ey, ex + dx, ey + dy)
+                    if fragile_below:
+                        sc -= 0.3
                 if sc > best_score:
                     best_score = sc
                     best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
@@ -918,7 +924,26 @@ def postprocess_solution(
                 logger.info("[postprocess] second reorder_fragile: %d->%d violations",
                             pre_count, post_count)
 
-    # Step 5: Compact again after insertions (only if safe)
+    # Step 5: Remove-and-refill to improve packing quality
+    elapsed3 = (_time.perf_counter() - t0) * 1000
+    remaining3 = time_budget_ms - elapsed3
+    if remaining3 > 100:
+        refilled, refill_unplaced = remove_and_refill(
+            pallet, placements, boxes, boxes_meta,
+            remove_fraction=0.15,
+            time_budget_ms=int(remaining3 * 0.5),
+        )
+        if len(refilled) >= len(placements):
+            # Check if fragility improved or didn't get worse
+            old_v = len(_find_fragility_violations(placements, boxes_meta))
+            new_v = len(_find_fragility_violations(refilled, boxes_meta))
+            if new_v <= old_v:
+                placements = refilled
+                unplaced = refill_unplaced
+                logger.info("[postprocess] remove_refill: %d placed, violations %d->%d",
+                            len(placements), old_v, new_v)
+
+    # Step 6: Compact again after insertions (only if safe)
     if len(placements) > len(solution.placements):
         compacted = compact_downward(pallet, placements, boxes_meta)
         # Verify compaction didn't break support
