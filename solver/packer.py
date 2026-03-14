@@ -1,5 +1,6 @@
 """Greedy packer: places boxes one by one using Extreme Points + scoring."""
 
+import hashlib
 import logging
 import time
 from collections import defaultdict
@@ -9,6 +10,7 @@ from .models import Box, Pallet, Placement, Solution, UnplacedItem
 from .orientations import get_orientations
 from .pallet_state import PalletState
 from .scoring import score_placement
+from .ml_ranker import MLPScorer, extract_features
 from . import __version__
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,14 @@ def _sort_max_dim_desc(box: Box) -> tuple:
     return (-max(box.length_mm, box.width_mm, box.height_mm),)
 
 
+def _make_random_sort(seed: int) -> Callable[[Box], tuple]:
+    """Create a deterministic pseudo-random sort key using hash."""
+    def key(box: Box) -> tuple:
+        h = hashlib.md5(f"{box.sku_id}:{seed}".encode()).hexdigest()
+        return (int(h[:8], 16),)
+    return key
+
+
 # Ordered by effectiveness across scenarios (best strategies first for adaptive budget)
 SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "constrained_first": _sort_constrained_first,   # Best for heavy_water
@@ -83,6 +93,10 @@ SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "weight_desc": _sort_weight_desc,                # Secondary
     "max_dim_desc": _sort_max_dim_desc,              # Secondary
 }
+
+# Add randomized sort strategies for exploration
+for _seed in range(10):
+    SORT_KEYS[f"random_{_seed}"] = _make_random_sort(_seed)
 
 
 # ── Expand boxes ────────────────────────────────────────────────────
@@ -104,11 +118,13 @@ def pack_greedy(
     boxes: List[Box],
     sort_key_name: str = "volume_desc",
     time_limit_ms: int = 0,
+    weight_profile: str = "default",
 ) -> Solution:
     """Pack boxes greedily using Extreme Points + scoring function.
 
     Args:
         time_limit_ms: If > 0, stop packing when this time limit is reached.
+        weight_profile: Scoring weight profile name.
     """
     t0 = time.perf_counter()
 
@@ -162,6 +178,7 @@ def pack_greedy(
                 sc = score_placement(
                     state, dx, dy, dz, ex, ey, ez,
                     box.weight_kg, box.fragile,
+                    weight_profile=weight_profile,
                 )
                 if sc > best_score:
                     best_score = sc
@@ -203,6 +220,227 @@ def pack_greedy(
     logger.info(
         "[pack_greedy] done sort=%s placed=%d unplaced=%d time=%dms",
         sort_key_name, len(placements), sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
+    )
+
+    return Solution(
+        task_id=task_id,
+        solver_version=__version__,
+        solve_time_ms=elapsed_ms,
+        placements=placements,
+        unplaced=unplaced,
+    )
+
+
+# ── ML-guided greedy packer ───────────────────────────────────────
+
+def pack_greedy_ml(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+    scorer: MLPScorer,
+    sort_key_name: str = "volume_desc",
+    time_limit_ms: int = 0,
+) -> Solution:
+    """Greedy packer using ML scorer instead of hand-tuned scoring.
+
+    Same algorithm as pack_greedy, but placement scoring uses the MLP.
+    """
+    t0 = time.perf_counter()
+
+    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
+    sorted_boxes = sorted(boxes, key=sort_fn)
+    instances = _expand_boxes(sorted_boxes)
+    total_items = len(instances)
+
+    # Precompute remaining volumes
+    vols = [b.length_mm * b.width_mm * b.height_mm for b, _ in instances]
+    cumvol = [0] * (total_items + 1)
+    for i in range(total_items - 1, -1, -1):
+        cumvol[i] = cumvol[i + 1] + vols[i]
+
+    state = PalletState(pallet)
+    placements: List[Placement] = []
+    unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+
+    check_interval = max(10, total_items // 10)
+
+    for item_idx, (box, inst_idx) in enumerate(instances):
+        if time_limit_ms > 0 and item_idx % check_interval == 0 and item_idx > 0:
+            elapsed = (time.perf_counter() - t0) * 1000
+            if elapsed > time_limit_ms:
+                for remaining_box, _ in instances[item_idx:]:
+                    reason = "weight_limit_exceeded" if state.current_weight + remaining_box.weight_kg > pallet.max_weight_kg else "no_space"
+                    unplaced_counts[remaining_box.sku_id]["count"] += 1
+                    unplaced_counts[remaining_box.sku_id]["reason"] = reason
+                break
+
+        orientations = get_orientations(box)
+        best_score = -float("inf")
+        best_placement: Optional[Tuple[int, int, int, int, int, int, str]] = None
+
+        items_remaining = total_items - item_idx
+        remaining_vol = cumvol[item_idx]
+
+        for ep in list(state.extreme_points):
+            ex, ey, ez = ep
+            for dx, dy, dz, rot_code in orientations:
+                if not state.can_place(
+                    dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile, box.stackable,
+                ):
+                    continue
+
+                # Hard block: check fragile constraint
+                h_score = score_placement(
+                    state, dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile,
+                )
+                if h_score < 0:
+                    continue
+
+                feats = extract_features(
+                    state, dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile, box.stackable,
+                    items_remaining, total_items, remaining_vol,
+                )
+                sc = scorer.predict(feats)
+
+                if sc > best_score:
+                    best_score = sc
+                    best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+
+        if best_placement is not None:
+            dx, dy, dz, px, py, pz, rot_code = best_placement
+            state.place(
+                box.sku_id, dx, dy, dz, px, py, pz,
+                box.weight_kg, box.fragile, box.stackable,
+            )
+            placements.append(Placement(
+                sku_id=box.sku_id, instance_index=inst_idx,
+                x_mm=px, y_mm=py, z_mm=pz,
+                length_mm=dx, width_mm=dy, height_mm=dz,
+                rotation_code=rot_code,
+            ))
+        else:
+            reason = "weight_limit_exceeded" if state.current_weight + box.weight_kg > pallet.max_weight_kg else "no_space"
+            unplaced_counts[box.sku_id]["count"] += 1
+            unplaced_counts[box.sku_id]["reason"] = reason
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    unplaced = [
+        UnplacedItem(sku_id=sid, quantity_unplaced=info["count"], reason=info["reason"])
+        for sid, info in unplaced_counts.items()
+    ]
+
+    logger.info(
+        "[pack_greedy_ml] done sort=%s placed=%d unplaced=%d time=%dms",
+        sort_key_name, len(placements),
+        sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
+    )
+
+    return Solution(
+        task_id=task_id,
+        solver_version=__version__,
+        solve_time_ms=elapsed_ms,
+        placements=placements,
+        unplaced=unplaced,
+    )
+
+
+# ── Best-fit packer (for small instances) ──────────────────────────
+
+MAX_BESTFIT_ITEMS = 50  # Only use for small instances
+
+
+def pack_bestfit(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+) -> Solution:
+    """Best-first greedy: at each step, choose the best (item, position, orientation)
+    from ALL remaining items. More expensive but finds better solutions for small instances.
+    """
+    t0 = time.perf_counter()
+
+    remaining = _expand_boxes(boxes)
+    total_items = len(remaining)
+
+    if total_items > MAX_BESTFIT_ITEMS:
+        logger.info("[pack_bestfit] too many items (%d > %d), skipping", total_items, MAX_BESTFIT_ITEMS)
+        return Solution(task_id=task_id, solver_version=__version__, solve_time_ms=0)
+
+    state = PalletState(pallet)
+    placements: List[Placement] = []
+
+    logger.info("[pack_bestfit] task=%s total_instances=%d", task_id, total_items)
+
+    while remaining:
+        best_score = -1.0
+        best_idx = -1
+        best_placement = None
+
+        for idx, (box, inst_idx) in enumerate(remaining):
+            # Skip if weight limit reached
+            if state.current_weight + box.weight_kg > pallet.max_weight_kg + 1e-6:
+                continue
+
+            orientations = get_orientations(box)
+            for ep in list(state.extreme_points):
+                ex, ey, ez = ep
+                for dx, dy, dz, rot_code in orientations:
+                    if not state.can_place(
+                        dx, dy, dz, ex, ey, ez,
+                        box.weight_kg, box.fragile, box.stackable,
+                    ):
+                        continue
+
+                    sc = score_placement(
+                        state, dx, dy, dz, ex, ey, ez,
+                        box.weight_kg, box.fragile,
+                    )
+                    if sc > best_score:
+                        best_score = sc
+                        best_idx = idx
+                        best_placement = (dx, dy, dz, ex, ey, ez, rot_code, box, inst_idx)
+
+        if best_placement is None:
+            break
+
+        dx, dy, dz, px, py, pz, rot_code, box, inst_idx = best_placement
+        state.place(
+            box.sku_id, dx, dy, dz, px, py, pz,
+            box.weight_kg, box.fragile, box.stackable,
+        )
+        placements.append(Placement(
+            sku_id=box.sku_id,
+            instance_index=inst_idx,
+            x_mm=px, y_mm=py, z_mm=pz,
+            length_mm=dx, width_mm=dy, height_mm=dz,
+            rotation_code=rot_code,
+        ))
+        remaining.pop(best_idx)
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    # Build unplaced summary
+    unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+    for box, inst_idx in remaining:
+        if state.current_weight + box.weight_kg > pallet.max_weight_kg:
+            reason = "weight_limit_exceeded"
+        else:
+            reason = "no_space"
+        unplaced_counts[box.sku_id]["count"] += 1
+        unplaced_counts[box.sku_id]["reason"] = reason
+
+    unplaced = [
+        UnplacedItem(sku_id=sid, quantity_unplaced=info["count"], reason=info["reason"])
+        for sid, info in unplaced_counts.items()
+    ]
+
+    logger.info(
+        "[pack_bestfit] done placed=%d unplaced=%d time=%dms",
+        len(placements), sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
     )
 
     return Solution(

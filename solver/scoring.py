@@ -6,10 +6,18 @@ from .pallet_state import PalletState
 logger = logging.getLogger(__name__)
 
 # Tunable weights
-W_HEIGHT = 0.35
-W_CONTACT = 0.30
+W_HEIGHT = 0.30
+W_CONTACT = 0.25
 W_FRAGILITY = 0.10
-W_FILL = 0.25
+W_FILL = 0.20
+W_LAYER = 0.15   # Reward layer-aligned placements
+
+# Alternative weight profiles for multi-restart
+WEIGHT_PROFILES = {
+    "default": (0.30, 0.25, 0.10, 0.20, 0.15),
+    "contact_heavy": (0.25, 0.30, 0.10, 0.20, 0.15),
+    "fill_heavy": (0.20, 0.25, 0.10, 0.30, 0.15),
+}
 
 
 def score_placement(
@@ -18,15 +26,22 @@ def score_placement(
     x: int, y: int, z: int,
     weight_kg: float,
     fragile: bool,
+    weight_profile: str = "default",
 ) -> float:
     """Score a candidate placement. Higher = better.
 
     Components:
     - height_penalty: prefer lower placements (minimize max height growth)
     - contact_bonus: reward contact with walls and neighbors (stability)
-    - fragility_penalty: penalize placing heavy items on fragile ones
+    - fragility_penalty: hard block placing heavy items on fragile ones
     - fill_bonus: reward filling lower gaps
+    - layer_bonus: reward placements aligned with existing layer heights
+
+    Args:
+        weight_profile: Name of weight profile from WEIGHT_PROFILES.
     """
+    wh, wc, wfr, wfi, wl = WEIGHT_PROFILES.get(weight_profile, WEIGHT_PROFILES["default"])
+
     x2, y2, z2 = x + dx, y + dy, z + dz
     max_h = state.pallet.max_height_mm
 
@@ -40,7 +55,6 @@ def score_placement(
     contact_score = min(1.0, contact / surface_area) if surface_area > 0 else 0.0
 
     # 3. Fragility penalty: hard block placing heavy box on fragile ones
-    fragility_score = 1.0
     if weight_kg > 2.0 and z > 0:
         fragile_below = state.get_fragile_boxes_at_top(z, x, y, x2, y2)
         if fragile_below:
@@ -49,11 +63,28 @@ def score_placement(
     # 4. Fill bonus: prefer positions with lower z (fill gaps first)
     fill_score = 1.0 - (z / max_h) if max_h > 0 else 0.0
 
+    # 5. Layer alignment: reward placing at z where box tops align with existing layers
+    layer_score = 0.0
+    if state.boxes:
+        # Check if z matches any existing box top (starting a new layer on top of existing)
+        for box in state.boxes:
+            if box.z_max == z:
+                layer_score = 0.5
+                break
+        # Extra bonus if z2 matches existing box tops (completing a flat surface)
+        for box in state.boxes:
+            if abs(box.z_max - z2) < 5:  # within 5mm tolerance
+                layer_score = 1.0
+                break
+    else:
+        layer_score = 1.0  # First box on floor is fine
+
     total = (
-        W_HEIGHT * height_score
-        + W_CONTACT * contact_score
-        + W_FRAGILITY * fragility_score
-        + W_FILL * fill_score
+        wh * height_score
+        + wc * contact_score
+        + wfr * 1.0  # Always 1.0 (violations return -1.0 above)
+        + wfi * fill_score
+        + wl * layer_score
     )
 
     return total
