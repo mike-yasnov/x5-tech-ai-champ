@@ -13,29 +13,52 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, server]
+    env:
+      PIP_CACHE_DIR: ${{ github.workspace }}/.pip-cache
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        include:
+          - python-version: "3.11"
+            container-image: python:3.11-bookworm
+          - python-version: "3.12"
+            container-image: python:3.12-bookworm
+
+    container:
+      image: ${{ matrix.container-image }}
+      options: --user 1000:1000
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          clean: false
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: .pip-cache
+          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python-version }}-
+
+      - name: Create virtual environment
+        run: |
+          python -m venv .venv
+          ./.venv/bin/pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run unit tests
         run: pytest tests/ -v --tb=short
 
   benchmark:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, server]
     needs: test
     if: github.event_name == 'pull_request'
+    env:
+      PIP_CACHE_DIR: ${{ github.workspace }}/.pip-cache
+    container:
+      image: python:3.12-bookworm
+      options: --user 1000:1000
     permissions:
       contents: read
       issues: write
@@ -43,14 +66,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          clean: false
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: .pip-cache
+          key: pip-${{ runner.os }}-3.12-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.12-
+
+      - name: Create virtual environment
+        run: |
+          python -m venv .venv
+          ./.venv/bin/pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run benchmark
         id: bench

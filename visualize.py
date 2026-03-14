@@ -32,6 +32,94 @@ def _color_for_sku(sku_id: str, index: int) -> str:
     return SKU_COLORS[index % len(SKU_COLORS)]
 
 
+def _calc_overlap_2d(b1: Dict[str, Any], b2: Dict[str, Any]) -> float:
+    """Площадь пересечения проекций на XY (x_min/x_max, y_min/y_max)."""
+    dx = max(0, min(b1["x_max"], b2["x_max"]) - max(b1["x_min"], b2["x_min"]))
+    dy = max(0, min(b1["y_max"], b2["y_max"]) - max(b1["y_min"], b2["y_min"]))
+    return dx * dy
+
+
+def _layout_unplaced_boxes(
+    unplaced: List[Dict[str, Any]],
+    boxes_meta: Dict[str, Any],
+    pallet: Dict[str, Any],
+    margin_mm: int = 450,
+) -> List[Dict[str, Any]]:
+    """Раскладывает неразмещённые коробки сбоку от паллеты (вдоль X). Возвращает список как placements."""
+    out = []
+    p_w = pallet["width_mm"]
+    p_l = pallet["length_mm"]
+    x_base = p_l + margin_mm
+    current_z = 0
+    current_y = 0
+    row_max_dy = 0
+
+    for u in unplaced:
+        sku_id = u.get("sku_id", "")
+        qty = u.get("quantity_unplaced", 0)
+        if qty <= 0:
+            continue
+        meta = boxes_meta.get(sku_id, {})
+        length_mm = meta.get("length_mm", 100)
+        width_mm = meta.get("width_mm", 100)
+        height_mm = meta.get("height_mm", 100)
+        for _ in range(qty):
+            out.append({
+                "sku_id": sku_id,
+                "x_mm": x_base,
+                "y_mm": current_y,
+                "z_mm": current_z,
+                "length_mm": length_mm,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+                "fragile": meta.get("fragile", False),
+                "weight_kg": meta.get("weight_kg", 0),
+            })
+            current_z += width_mm
+            row_max_dy = max(row_max_dy, height_mm)
+            if current_z > p_w * 1.2:
+                current_z = 0
+                current_y += row_max_dy
+                row_max_dy = 0
+
+    return out
+
+
+def _fragility_violation_bottom_indices(placements: List[Dict[str, Any]]) -> set:
+    """Индексы placement'ов, которые являются нижним (хрупким) объектом в паре с нарушением fragile.
+    Правило: тяжёлая (>2 kg) коробка сверху на хрупкой при пересечении по XY.
+    """
+    n = len(placements)
+    boxes = []
+    for p in placements:
+        boxes.append({
+            "x_min": p["x_mm"],
+            "x_max": p["x_mm"] + p["length_mm"],
+            "y_min": p["y_mm"],
+            "y_max": p["y_mm"] + p["width_mm"],
+            "z_min": p["z_mm"],
+            "z_max": p["z_mm"] + p["height_mm"],
+            "weight_kg": p.get("weight_kg", 0),
+            "fragile": p.get("fragile", False),
+        })
+    bottom_indices = set()
+    for i in range(n):
+        if not boxes[i]["fragile"]:
+            continue
+        for j in range(n):
+            if i == j:
+                continue
+            if boxes[j]["weight_kg"] <= 2.0:
+                continue
+            if abs(boxes[j]["z_min"] - boxes[i]["z_max"]) >= 1e-6:
+                continue
+            if _calc_overlap_2d(boxes[i], boxes[j]) <= 0:
+                continue
+            bottom_indices.add(i)
+            break
+    return bottom_indices
+
+
 def _generate_html(scenario: Dict[str, Any]) -> str:
     """Generate a standalone HTML file with Three.js 3D visualization."""
     pallet = scenario["pallet"]
@@ -42,11 +130,15 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
     placed = meta.get("placed", 0)
     total = meta.get("total_items", 0)
 
-    # Assign colors to SKUs
-    sku_ids = sorted(set(p["sku_id"] for p in placements))
+    # Assign colors to SKUs (placed + unplaced)
+    unplaced_boxes = scenario.get("unplaced_boxes", [])
+    sku_ids = sorted(set(p["sku_id"] for p in placements) | set(p["sku_id"] for p in unplaced_boxes))
     sku_color_map = {sid: _color_for_sku(sid, i) for i, sid in enumerate(sku_ids)}
 
-    # Build JS data
+    # Fragility violations: нижний (хрупкий) объект в паре — выделяем ему верхнюю грань
+    violation_bottom = _fragility_violation_bottom_indices(placements)
+
+    # Build JS data for placed boxes
     boxes_js = json.dumps([
         {
             "sku_id": p["sku_id"],
@@ -54,8 +146,23 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
             "dx": p["length_mm"], "dy": p["height_mm"], "dz": p["width_mm"],
             "color": sku_color_map[p["sku_id"]],
             "fragile": p.get("fragile", False),
+            "weight_kg": p.get("weight_kg", 0),
+            "fragility_violation_bottom": i in violation_bottom,
         }
-        for p in placements
+        for i, p in enumerate(placements)
+    ])
+
+    # Build JS data for unplaced boxes (same coords: x_mm, z_mm -> y, y_mm -> z in Three)
+    unplaced_boxes_js = json.dumps([
+        {
+            "sku_id": p["sku_id"],
+            "x": p["x_mm"], "y": p["z_mm"], "z": p["y_mm"],
+            "dx": p["length_mm"], "dy": p["height_mm"], "dz": p["width_mm"],
+            "color": sku_color_map[p["sku_id"]],
+            "fragile": p.get("fragile", False),
+            "weight_kg": p.get("weight_kg", 0),
+        }
+        for p in unplaced_boxes
     ])
 
     pallet_js = json.dumps({
@@ -63,6 +170,8 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
         "dy": pallet["max_height_mm"],
         "dz": pallet["width_mm"],
     })
+
+    unplaced_count = len(unplaced_boxes)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -93,6 +202,14 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
     background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 6px;
     font-size: 12px; pointer-events: none; white-space: nowrap;
   }}
+  #slider-wrap {{
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+    background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px;
+    display: flex; align-items: center; gap: 12px; backdrop-filter: blur(8px);
+  }}
+  #slider-wrap label {{ color: #aaa; font-size: 12px; white-space: nowrap; }}
+  #slider-wrap input[type="range"] {{ width: 200px; accent-color: #7BAAF7; }}
+  #slider-wrap .step-value {{ color: #fff; font-weight: 600; min-width: 4ch; }}
   canvas {{ display: block; }}
 </style>
 </head>
@@ -102,11 +219,17 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
   <h2>{scenario_name}</h2>
   <span class="metric">Score:</span> <span class="value">{score:.4f}</span><br>
   <span class="metric">Placed:</span> <span class="value">{placed}/{total}</span><br>
+  <span class="metric">Unplaced:</span> <span class="value">{unplaced_count}</span> <span class="metric">(shown to the right)</span><br>
   <span class="metric">Controls:</span> <span class="metric">drag to rotate, scroll to zoom</span>
 </div>
 
 <div id="legend"></div>
 <div id="tooltip"></div>
+<div id="slider-wrap">
+  <label for="step-slider">Шаг укладки:</label>
+  <input type="range" id="step-slider" min="0" max="1" value="1" step="1">
+  <span class="step-value" id="step-value">0 / 0</span>
+</div>
 
 <script type="importmap">
 {{
@@ -123,6 +246,7 @@ import {{ OrbitControls }} from 'three/addons/controls/OrbitControls.js';
 
 const PALLET = {pallet_js};
 const BOXES = {boxes_js};
+const UNPLACED_BOXES = {unplaced_boxes_js};
 
 // Scale to meters for better camera behavior
 const S = 1 / 1000;
@@ -131,12 +255,14 @@ const S = 1 / 1000;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 
-// Camera
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 100);
+// Camera: if unplaced exist, frame both pallet and unplaced zone
 const cx = PALLET.dx * S / 2, cy = PALLET.dy * S / 2, cz = PALLET.dz * S / 2;
 const maxDim = Math.max(PALLET.dx, PALLET.dy, PALLET.dz) * S;
-camera.position.set(cx + maxDim * 1.2, cy + maxDim * 0.8, cz + maxDim * 1.2);
-camera.lookAt(cx, cy * 0.4, cz);
+const unplacedWidth = UNPLACED_BOXES.length > 0 ? 700 * S : 0;
+const viewCenterX = cx + (unplacedWidth / 2);
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 100);
+camera.position.set(viewCenterX + maxDim * 1.4, cy + maxDim * 0.8, cz + maxDim * 1.2);
+camera.lookAt(viewCenterX, cy * 0.4, cz);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({{ antialias: true }});
@@ -199,6 +325,7 @@ scene.add(limitLine);
 // Box meshes
 const boxMeshes = [];
 const boxData = [];
+const placedBoxNodes = [];
 
 BOXES.forEach((box, i) => {{
   const geo = new THREE.BoxGeometry(box.dx * S, box.dy * S, box.dz * S);
@@ -220,44 +347,103 @@ BOXES.forEach((box, i) => {{
   mesh.receiveShadow = true;
   scene.add(mesh);
 
-  // Wireframe edges
   const edges = new THREE.EdgesGeometry(geo);
   const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x000000, transparent: true, opacity: 0.3 }}));
   line.position.copy(mesh.position);
   scene.add(line);
 
-  // Fragile marker
-  if (box.fragile) {{
-    const markerGeo = new THREE.SphereGeometry(Math.min(box.dx, box.dz) * S * 0.15, 8, 8);
-    const markerMat = new THREE.MeshStandardMaterial({{ color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 0.5 }});
-    const marker = new THREE.Mesh(markerGeo, markerMat);
-    marker.position.set(
-      (box.x + box.dx / 2) * S,
-      (box.y + box.dy) * S + 0.005,
-      (box.z + box.dz / 2) * S
-    );
+  let marker = null;
+  const cx = (box.x + box.dx / 2) * S;
+  const cyTop = (box.y + box.dy) * S + 0.005;
+  const cz = (box.z + box.dz / 2) * S;
+  const markerMat = new THREE.MeshStandardMaterial({{ color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 0.6 }});
+  if (box.fragility_violation_bottom) {{
+    const r = Math.min(box.dx, box.dz) * S * 0.2;
+    const t = r * 0.2;
+    marker = new THREE.Group();
+    marker.add(new THREE.Mesh(new THREE.BoxGeometry(r * 2, t, t), markerMat));
+    marker.add(new THREE.Mesh(new THREE.BoxGeometry(t, r * 2, t), markerMat));
+    marker.add(new THREE.Mesh(new THREE.BoxGeometry(t, t, r * 2), markerMat));
+    marker.position.set(cx, cyTop, cz);
+    scene.add(marker);
+  }} else if (box.fragile) {{
+    marker = new THREE.Mesh(new THREE.SphereGeometry(Math.min(box.dx, box.dz) * S * 0.15, 8, 8), markerMat);
+    marker.position.set(cx, cyTop, cz);
     scene.add(marker);
   }}
 
+  placedBoxNodes.push({{ mesh, line, marker }});
   boxMeshes.push(mesh);
-  boxData.push(box);
+  boxData.push({{ ...box, unplaced: false }});
+}});
+
+UNPLACED_BOXES.forEach((box, i) => {{
+  const geo = new THREE.BoxGeometry(box.dx * S, box.dy * S, box.dz * S);
+  const mat = new THREE.MeshStandardMaterial({{
+    color: new THREE.Color(box.color),
+    roughness: 0.5,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.6,
+  }});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(
+    (box.x + box.dx / 2) * S,
+    (box.y + box.dy / 2) * S,
+    (box.z + box.dz / 2) * S
+  );
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  const edges = new THREE.EdgesGeometry(geo);
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x666666, transparent: true, opacity: 0.4 }}));
+  line.position.copy(mesh.position);
+  scene.add(line);
+  boxMeshes.push(mesh);
+  boxData.push({{ ...box, unplaced: true }});
 }});
 
 // Legend
 const legend = document.getElementById('legend');
 const skuSet = new Map();
-BOXES.forEach(b => {{
+[...BOXES, ...UNPLACED_BOXES].forEach(b => {{
   if (!skuSet.has(b.sku_id)) {{
-    const count = BOXES.filter(x => x.sku_id === b.sku_id).length;
-    skuSet.set(b.sku_id, {{ color: b.color, count }});
+    const placed = BOXES.filter(x => x.sku_id === b.sku_id).length;
+    const unplaced = UNPLACED_BOXES.filter(x => x.sku_id === b.sku_id).length;
+    skuSet.set(b.sku_id, {{ color: b.color, placed, unplaced }});
   }}
 }});
 skuSet.forEach((v, sku) => {{
   const item = document.createElement('div');
   item.className = 'item';
-  item.innerHTML = `<div class="swatch" style="background:${{v.color}}"></div>${{sku}} (${{v.count}})`;
+  const label = v.unplaced > 0 ? `${{sku}} (placed: ${{v.placed}}, unplaced: ${{v.unplaced}})` : `${{sku}} (${{v.placed}})`;
+  item.innerHTML = `<div class="swatch" style="background:${{v.color}}"></div>${{label}}`;
   legend.appendChild(item);
 }});
+
+// Step slider: show only first N placed boxes
+const stepSlider = document.getElementById('step-slider');
+const stepValueEl = document.getElementById('step-value');
+const totalPlaced = BOXES.length;
+stepSlider.min = 0;
+stepSlider.max = Math.max(1, totalPlaced);
+stepSlider.value = totalPlaced;
+stepSlider.step = 1;
+stepValueEl.textContent = totalPlaced + ' / ' + totalPlaced;
+function updateStepVisibility(step) {{
+  const n = Math.max(0, Math.min(step, totalPlaced));
+  placedBoxNodes.forEach((node, i) => {{
+    const visible = i < n;
+    node.mesh.visible = visible;
+    node.line.visible = visible;
+    if (node.marker) node.marker.visible = visible;
+  }});
+  stepValueEl.textContent = n + ' / ' + totalPlaced;
+}}
+stepSlider.addEventListener('input', () => updateStepVisibility(parseInt(stepSlider.value, 10)));
+if (totalPlaced === 0) {{
+  document.getElementById('slider-wrap').style.display = 'none';
+}}
 
 // Tooltip on hover
 const raycaster = new THREE.Raycaster();
@@ -276,7 +462,7 @@ renderer.domElement.addEventListener('mousemove', (e) => {{
       tooltip.style.display = 'block';
       tooltip.style.left = (e.clientX + 12) + 'px';
       tooltip.style.top = (e.clientY + 12) + 'px';
-      tooltip.innerHTML = `<b>${{b.sku_id}}</b><br>${{b.dx}}x${{b.dz}}x${{b.dy}}mm${{b.fragile ? '<br><span style="color:#ff6666">FRAGILE</span>' : ''}}`;
+      tooltip.innerHTML = `<b>${{b.sku_id}}</b>${{b.unplaced ? ' <span style="color:#888">(Unplaced)</span>' : ''}}<br>${{b.dx}}×${{b.dz}}×${{b.dy}} mm<br>Weight: ${{b.weight_kg}} kg${{b.fragile ? '<br><span style="color:#ff6666">FRAGILE</span>' : ''}}`;
     }}
   }} else {{
     tooltip.style.display = 'none';
@@ -328,11 +514,15 @@ def generate_viz_data(benchmark_results: List[Dict], requests: List[Dict]) -> Li
                 "width_mm": dim["width_mm"],
                 "height_mm": dim["height_mm"],
                 "fragile": sku.get("fragile", False),
+                "weight_kg": sku.get("weight_kg", 0),
             })
 
+        unplaced = result.get("response", {}).get("unplaced", [])
+        unplaced_boxes = _layout_unplaced_boxes(unplaced, boxes_meta, pallet)
         viz_data.append({
             "pallet": pallet,
             "placements": placements,
+            "unplaced_boxes": unplaced_boxes,
             "meta": {
                 "scenario": result["scenario"],
                 "score": result.get("final_score", 0),
