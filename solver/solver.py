@@ -101,24 +101,25 @@ def solve(
 
     # ── Phase 2: Paper method — BuildLayers + stacking (only if budget allows) ─
     total_items = sum(b.quantity for b in boxes)
-    remaining_budget = time_budget_ms * 0.80 - _elapsed()
-    # Skip paper method for large instances or when time is tight
-    if remaining_budget > 200 and total_items <= 120:
+    elapsed_after_greedy = _elapsed()
+    # Conservative gate: need ≥70% budget remaining AND ≤40 items
+    if elapsed_after_greedy < time_budget_ms * 0.25 and total_items <= 40:
         try:
             layers = build_layers(pallet, boxes, seed=42)
-            logger.info("[solve] paper method: %d layers generated", len(layers))
+            logger.info("[solve] paper method: %d layers generated in %.0fms",
+                        len(layers), _elapsed() - elapsed_after_greedy)
 
-            if layers:
-                # Try density stacking first (best heuristic)
+            # Bail if build_layers consumed too much time
+            if layers and _elapsed() < time_budget_ms * 0.55:
+                # Try density stacking
+                solution = stack_layers(
+                    task_id, pallet, boxes, layers,
+                    sort_strategy="density",
+                )
+                _update_best(solution, "paper/density")
+
+                # Try ML ranking if we still have time
                 if _elapsed() < time_budget_ms * 0.65:
-                    solution = stack_layers(
-                        task_id, pallet, boxes, layers,
-                        sort_strategy="density",
-                    )
-                    _update_best(solution, "paper/density")
-
-                # Try ML ranking if model exists and we have time
-                if _elapsed() < time_budget_ms * 0.75:
                     ml_scores = predict_layer_scores(boxes, layers)
                     if ml_scores:
                         solution = stack_layers(
