@@ -187,3 +187,21 @@ def test_portfolio_solver_falls_back_without_model_and_stays_valid(tmp_path):
     )
     result = evaluate_solution(request_dict, solution_to_dict(solution))
     assert result["valid"] is True
+
+
+def test_legacy_greedy_strategy_regression_stays_valid():
+    request_dict = generate_scenario("test_legacy_random", "random_mixed", seed=45)
+    task_id, pallet, boxes = _request_to_models(request_dict)
+
+    solution = solve(
+        task_id=task_id,
+        pallet=pallet,
+        boxes=boxes,
+        request_dict=request_dict,
+        strategy="legacy_greedy",
+        time_budget_ms=900,
+    )
+
+    result = evaluate_solution(request_dict, solution_to_dict(solution))
+    assert result["valid"] is True
+    assert solution.solve_time_ms < 1000

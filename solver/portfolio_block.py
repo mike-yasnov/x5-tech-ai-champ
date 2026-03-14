@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import math
 import time
@@ -20,12 +21,18 @@ from .hybrid.pallet_state import PalletState, PlacedBox
 from .hybrid.postprocess import postprocess
 from .hybrid.rotations import get_orientations
 from .models import Box, Pallet
-from .packer import pack_greedy
+from .packer import order_boxes, pack_greedy, pack_ordered_boxes
+from .scenario_selector import (
+    SEED_FAMILIES,
+    ScenarioFingerprint,
+    ScenarioSelector,
+    compute_request_fingerprint,
+)
 
 
 logger = logging.getLogger(__name__)
 
-SOLVER_VERSION = "portfolio-block-v0.1"
+SOLVER_VERSION = "portfolio-block-v0.2"
 CONSTRUCTIVE_POLICIES = ("foundation", "fragile_last", "coverage_fill")
 LEGACY_PORTFOLIO_SORTS = (
     "constrained_first",
@@ -33,6 +40,14 @@ LEGACY_PORTFOLIO_SORTS = (
     "volume_desc",
     "density_desc",
 )
+GREEDY_SEED_TO_SORT = {
+    "heavy_base": "constrained_first",
+    "liquid_fill": "base_area_desc",
+    "mixed_volume": "volume_desc",
+    "fragile_density": "density_desc",
+    "coverage_tie": "coverage_tie",
+}
+GREEDY_SEED_FAMILIES = tuple(name for name in SEED_FAMILIES if name != "block_structured")
 
 
 @dataclass(frozen=True)
@@ -99,6 +114,8 @@ class PolicyRun:
     score: float
     elapsed_ms: int
     used_model: bool = False
+    seed_family: str = ""
+    ordered_skus: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -126,114 +143,98 @@ def solve_request(
     time_budget_ms: int = 900,
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
-    pallet = request["pallet"]
-    boxes = request["boxes"]
-    total_items = sum(box["quantity"] for box in boxes)
-
-    checker, candidate_gen, _ = _init_common_components(request)
+    checker, candidate_gen, total_items = _init_common_components(request)
+    fingerprint = compute_request_fingerprint(request)
+    selector = _load_optional_selector(model_dir)
     ranker, extractor = _load_optional_ranker(model_dir)
+    proxy_upper_bound = _proxy_upper_bound(request)
 
-    if total_items > 70:
-        best = _run_legacy_portfolio(
-            request,
+    seed_limit_ms = min(220, max(120, time_budget_ms // 4))
+    order_budget_ms = max(80, min(260, time_budget_ms // 4))
+    repair_budget_ms = max(80, min(160, time_budget_ms // 6))
+
+    ranked_families = _rank_seed_families(fingerprint, selector)
+    runs: List[PolicyRun] = []
+
+    for seed_family in ranked_families[:3]:
+        elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+        budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
+        if budget_left <= 20:
+            break
+        run = _run_seed_family(
+            request=request,
+            seed_family=seed_family,
             checker=checker,
             candidate_gen=candidate_gen,
-            budget_ms=min(time_budget_ms, 600),
-        )
-        placements = _reindex_placements(best.placements)
-        final_state, _ = _rebuild_state(request, placements)
-        elapsed_ms = int((time.perf_counter() - t0) * 1000)
-        return _format_output(
-            request["task_id"],
-            placements,
-            _clone_remaining(best.remaining),
-            boxes,
-            final_state,
-            elapsed_ms,
-        )
-
-    budget = {
-        "foundation": int(time_budget_ms * 0.18),
-        "fragile_last": int(time_budget_ms * 0.15),
-        "coverage_fill": int(time_budget_ms * 0.15),
-        "legacy_portfolio": int(time_budget_ms * 0.13),
-        "repair": int(time_budget_ms * 0.09),
-    }
-
-    runs: List[PolicyRun] = []
-    for policy_name in CONSTRUCTIVE_POLICIES:
-        state, ep_manager, remaining = _fresh_search_state(request)
-        deadline = time.perf_counter() + budget[policy_name] / 1000.0
-        run = _construct_with_policy(
-            request=request,
-            policy_name=policy_name,
-            state=state,
-            ep_manager=ep_manager,
-            remaining=remaining,
-            checker=checker,
-            deadline=deadline,
             ranker=ranker,
             extractor=extractor,
-            max_block_span=4,
+            budget_ms=min(seed_limit_ms, budget_left),
         )
         runs.append(run)
+        if _is_near_proxy_upper_bound(run.score, proxy_upper_bound):
+            break
 
-    runs.append(
-        _run_legacy_portfolio(
-            request,
-            checker=checker,
-            candidate_gen=candidate_gen,
-            budget_ms=budget["legacy_portfolio"],
+    if not runs:
+        runs.append(
+            _run_legacy_portfolio(
+                request,
+                checker=checker,
+                candidate_gen=candidate_gen,
+                budget_ms=min(time_budget_ms, 250),
+            )
         )
-    )
+
+    enable_local_order = fingerprint.total_items <= 120 and fingerprint.sku_count <= 8
+    best_greedy = _best_greedy_run(runs)
+    if best_greedy is not None and enable_local_order:
+        elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+        budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
+        if budget_left > 25:
+            improved = _local_order_search(
+                request=request,
+                run=best_greedy,
+                checker=checker,
+                candidate_gen=candidate_gen,
+                budget_ms=min(order_budget_ms, budget_left),
+            )
+            if _run_sort_key(improved) > _run_sort_key(best_greedy):
+                runs.append(improved)
+
+    enable_repair = fingerprint.total_items <= 120
+    best_two = sorted(runs, key=_run_sort_key, reverse=True)[:2]
+    if best_two and enable_repair:
+        per_run_repair_ms = max(35, repair_budget_ms // len(best_two))
+        for candidate in best_two:
+            elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+            budget_left = max(0, time_budget_ms - elapsed_so_far)
+            if budget_left <= 20:
+                break
+            repaired = _repair_candidate_run(
+                request=request,
+                run=candidate,
+                checker=checker,
+                candidate_gen=candidate_gen,
+                ranker=ranker,
+                extractor=extractor,
+                budget_ms=min(per_run_repair_ms, budget_left),
+            )
+            if _run_sort_key(repaired) > _run_sort_key(candidate):
+                runs.append(repaired)
+
     best = _select_best_run(runs)
-
-    if best.block_steps and budget["repair"] > 0:
-        repaired = _repair_run(
-            request=request,
-            run=best,
-            checker=checker,
-            ranker=ranker,
-            extractor=extractor,
-            budget_ms=budget["repair"],
-        )
-        if _run_sort_key(repaired) > _run_sort_key(best):
-            best = repaired
-
-    if best.name.startswith("legacy_portfolio"):
-        placements = _reindex_placements(best.placements)
-        leftover = _clone_remaining(best.remaining)
-        final_state, _ = _rebuild_state(request, placements)
-    else:
-        fresh_state = PalletState(
-            pallet["length_mm"],
-            pallet["width_mm"],
-            pallet["max_height_mm"],
-            pallet["max_weight_kg"],
-        )
-        placements, leftover = postprocess(
-            _reindex_placements(best.placements),
-            _clone_remaining(best.remaining),
-            fresh_state,
-            checker,
-            ExtremePointManager(pallet["length_mm"], pallet["width_mm"]),
-            candidate_gen,
-        )
-        post_state, _ = _rebuild_state(request, placements)
-        pre_state, _ = _rebuild_state(request, best.placements)
-        if _solution_proxy(post_state, total_items) + 1e-9 < _solution_proxy(pre_state, total_items):
-            placements = _reindex_placements(best.placements)
-            leftover = _clone_remaining(best.remaining)
-            final_state = pre_state
-        else:
-            final_state = post_state
+    placements, leftover, final_state = _finalize_run(
+        request=request,
+        run=best,
+        checker=checker,
+        candidate_gen=candidate_gen,
+    )
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
     return _format_output(
         request["task_id"],
         placements,
         leftover,
-        boxes,
+        request["boxes"],
         final_state,
         elapsed_ms,
     )
@@ -243,13 +244,23 @@ def solve_legacy_greedy_request(
     request: Dict[str, Any],
     time_budget_ms: int = 900,
 ) -> Dict[str, Any]:
-    _ = time_budget_ms
-    run = _run_legacy_portfolio(request, budget_ms=150)
-    state, _ = _rebuild_state(request, run.placements)
+    checker, candidate_gen, _ = _init_common_components(request)
+    run = _run_legacy_portfolio(
+        request,
+        checker=checker,
+        candidate_gen=candidate_gen,
+        budget_ms=min(time_budget_ms, 250),
+    )
+    placements, leftover, state = _finalize_run(
+        request=request,
+        run=run,
+        checker=checker,
+        candidate_gen=candidate_gen,
+    )
     return _format_output(
         request["task_id"],
-        run.placements,
-        run.remaining,
+        placements,
+        leftover,
         request["boxes"],
         state,
         run.elapsed_ms,
@@ -404,10 +415,519 @@ def _remaining_from_placements(
 def _load_optional_ranker(
     model_dir: str | Path,
 ) -> Tuple[Optional[BlockRanker], Optional[BlockFeatureExtractor]]:
+    meta = _read_json(Path(model_dir) / "meta.json")
+    if meta and not meta.get("runtime_enabled", False):
+        return None, None
     ranker = BlockRanker(model_dir=model_dir)
     if ranker.load():
         return ranker, BlockFeatureExtractor()
     return None, None
+
+
+def _load_optional_selector(model_dir: str | Path) -> Optional[ScenarioSelector]:
+    selector = ScenarioSelector(model_dir=model_dir)
+    if selector.load():
+        return selector
+    return None
+
+
+def _read_json(path: Path) -> Optional[dict]:
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception:
+        return None
+
+
+def _rank_seed_families(
+    fingerprint: ScenarioFingerprint,
+    selector: Optional[ScenarioSelector],
+) -> List[str]:
+    fallback = _fallback_seed_order(fingerprint)
+    if selector is None or not selector.is_trained:
+        return fallback
+
+    try:
+        learned = selector.rank_families(fingerprint)
+    except Exception:
+        return fallback
+
+    return _blend_seed_orders(learned, fallback, fingerprint)
+
+
+def _fallback_seed_order(fingerprint: ScenarioFingerprint) -> List[str]:
+    primary: str
+    if fingerprint.weight_ratio >= 0.90 and fingerprint.upright_ratio >= 0.50:
+        primary = "heavy_base"
+    elif fingerprint.fragile_ratio >= 0.30 and fingerprint.total_items < 60:
+        primary = "fragile_density"
+    elif fingerprint.volume_ratio < 0.60:
+        primary = "liquid_fill"
+    else:
+        primary = "mixed_volume"
+
+    order: List[str] = [primary]
+    for seed_family in ("heavy_base", "liquid_fill", "mixed_volume", "fragile_density"):
+        if seed_family not in order:
+            order.append(seed_family)
+
+    if (
+        fingerprint.volume_ratio >= 0.95
+        and fingerprint.total_items <= 12
+        and "coverage_tie" not in order[:2]
+    ):
+        order.insert(1, "coverage_tie")
+    else:
+        order.append("coverage_tie")
+
+    allow_block_top3 = (
+        fingerprint.total_items <= 60
+        and (
+            fingerprint.sku_count <= 4
+            or fingerprint.max_sku_share >= 0.45
+        )
+    )
+    if allow_block_top3:
+        insert_at = 2 if len(order) >= 2 else len(order)
+        if "block_structured" in order:
+            order.remove("block_structured")
+        order.insert(insert_at, "block_structured")
+    else:
+        order = [seed_family for seed_family in order if seed_family != "block_structured"]
+        order.append("block_structured")
+
+    deduped: List[str] = []
+    for seed_family in order:
+        if seed_family not in deduped:
+            deduped.append(seed_family)
+    return deduped
+
+
+def _blend_seed_orders(
+    learned_order: Sequence[str],
+    fallback_order: Sequence[str],
+    fingerprint: ScenarioFingerprint,
+) -> List[str]:
+    allow_block_top3 = (
+        fingerprint.total_items <= 60
+        and (
+            fingerprint.sku_count <= 4
+            or fingerprint.max_sku_share >= 0.45
+        )
+    )
+    scores: Dict[str, float] = {}
+    total = float(len(SEED_FAMILIES))
+    for idx, seed_family in enumerate(fallback_order):
+        scores[seed_family] = scores.get(seed_family, 0.0) + (total - idx) * 1.0
+    for idx, seed_family in enumerate(learned_order):
+        scores[seed_family] = scores.get(seed_family, 0.0) + (total - idx) * 0.7
+
+    if not allow_block_top3:
+        scores["block_structured"] = scores.get("block_structured", 0.0) - total
+    if (
+        fingerprint.volume_ratio >= 0.95
+        and fingerprint.total_items <= 12
+    ):
+        scores["coverage_tie"] = scores.get("coverage_tie", 0.0) + 1.5
+
+    return sorted(SEED_FAMILIES, key=lambda seed_family: scores.get(seed_family, 0.0), reverse=True)
+
+
+def _proxy_upper_bound(request: Dict[str, Any]) -> float:
+    pallet = request["pallet"]
+    total_volume = sum(
+        box["length_mm"] * box["width_mm"] * box["height_mm"] * box["quantity"]
+        for box in request["boxes"]
+    )
+    pallet_volume = (
+        pallet["length_mm"] * pallet["width_mm"] * pallet["max_height_mm"]
+    )
+    vol_cap = min(1.0, total_volume / max(pallet_volume, 1))
+    return 0.50 * vol_cap + 0.30 + 0.10
+
+
+def _is_near_proxy_upper_bound(score: float, upper_bound: float) -> bool:
+    return score >= upper_bound - 0.01
+
+
+def _run_seed_family(
+    request: Dict[str, Any],
+    seed_family: str,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    ranker: Optional[BlockRanker],
+    extractor: Optional[BlockFeatureExtractor],
+    budget_ms: int,
+) -> PolicyRun:
+    if seed_family == "block_structured":
+        return _run_block_structured_seed(
+            request=request,
+            checker=checker,
+            ranker=ranker,
+            extractor=extractor,
+            budget_ms=budget_ms,
+        )
+    return _run_greedy_seed_family(
+        request=request,
+        seed_family=seed_family,
+        checker=checker,
+        candidate_gen=candidate_gen,
+        budget_ms=budget_ms,
+    )
+
+
+def _run_block_structured_seed(
+    request: Dict[str, Any],
+    checker: FeasibilityChecker,
+    ranker: Optional[BlockRanker],
+    extractor: Optional[BlockFeatureExtractor],
+    budget_ms: int,
+) -> PolicyRun:
+    if budget_ms <= 0:
+        state, _, remaining = _fresh_search_state(request)
+        return PolicyRun(
+            name="block_structured",
+            placements=[],
+            remaining=remaining,
+            block_steps=[],
+            score=_solution_proxy(state, sum(box["quantity"] for box in request["boxes"])),
+            elapsed_ms=0,
+            seed_family="block_structured",
+        )
+
+    budget = {
+        "foundation": max(40, int(budget_ms * 0.38)),
+        "fragile_last": max(35, int(budget_ms * 0.31)),
+        "coverage_fill": max(35, budget_ms - int(budget_ms * 0.69)),
+    }
+    runs: List[PolicyRun] = []
+    for policy_name in CONSTRUCTIVE_POLICIES:
+        state, ep_manager, remaining = _fresh_search_state(request)
+        deadline = time.perf_counter() + budget[policy_name] / 1000.0
+        run = _construct_with_policy(
+            request=request,
+            policy_name=policy_name,
+            state=state,
+            ep_manager=ep_manager,
+            remaining=remaining,
+            checker=checker,
+            deadline=deadline,
+            ranker=ranker,
+            extractor=extractor,
+            max_block_span=4,
+        )
+        run.name = f"block_structured:{policy_name}"
+        run.seed_family = "block_structured"
+        runs.append(run)
+    return _select_best_run(runs)
+
+
+def _run_greedy_seed_family(
+    request: Dict[str, Any],
+    seed_family: str,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    budget_ms: int,
+    ordered_boxes: Optional[List[Box]] = None,
+    apply_postprocess: bool = True,
+) -> PolicyRun:
+    t0 = time.perf_counter()
+    task_id, pallet, boxes = _request_to_models(request)
+    total_items = sum(box.quantity for box in boxes)
+    if ordered_boxes is None:
+        ordered_boxes = _ordered_boxes_for_seed(boxes, seed_family)
+    solution = pack_ordered_boxes(
+        task_id,
+        pallet,
+        ordered_boxes,
+        label=seed_family,
+    )
+    placements = _placements_from_public_solution(
+        request["boxes"], solution.placements
+    )
+    remaining = _remaining_from_placements(request["boxes"], placements)
+    state, _ = _rebuild_state(request, placements)
+    run = PolicyRun(
+        name=seed_family,
+        placements=placements,
+        remaining=remaining,
+        block_steps=[],
+        score=_solution_proxy(state, total_items),
+        elapsed_ms=solution.solve_time_ms,
+        used_model=False,
+        seed_family=seed_family,
+        ordered_skus=tuple(box.sku_id for box in ordered_boxes),
+    )
+    if apply_postprocess:
+        post_budget_ms = max(0, budget_ms - int((time.perf_counter() - t0) * 1000))
+        run = _maybe_postprocess_run(
+            request=request,
+            run=run,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            total_items=total_items,
+            time_budget_left_ms=post_budget_ms,
+        )
+        run.seed_family = seed_family
+        run.ordered_skus = tuple(box.sku_id for box in ordered_boxes)
+    return run
+
+
+def _ordered_boxes_for_seed(boxes: Sequence[Box], seed_family: str) -> List[Box]:
+    if seed_family not in GREEDY_SEED_TO_SORT:
+        return list(boxes)
+    return order_boxes(boxes, GREEDY_SEED_TO_SORT[seed_family])
+
+
+def _best_greedy_run(runs: Sequence[PolicyRun]) -> Optional[PolicyRun]:
+    greedy_runs = [run for run in runs if run.seed_family in GREEDY_SEED_FAMILIES]
+    if not greedy_runs:
+        return None
+    return _select_best_run(greedy_runs)
+
+
+def _local_order_search(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    budget_ms: int,
+) -> PolicyRun:
+    if budget_ms <= 0 or not run.ordered_skus:
+        return run
+
+    _, _, boxes = _request_to_models(request)
+    by_sku = {box.sku_id: box for box in boxes}
+    current_order = [by_sku[sku_id] for sku_id in run.ordered_skus if sku_id in by_sku]
+    top_n = min(4, len(current_order))
+    if top_n < 2:
+        return run
+
+    deadline = time.perf_counter() + budget_ms / 1000.0
+    best_run = run
+    neighbors = _generate_order_neighbors(current_order, top_n)
+    for idx, neighbor in enumerate(neighbors):
+        if time.perf_counter() >= deadline:
+            break
+        candidate = _run_greedy_seed_family(
+            request=request,
+            seed_family=run.seed_family or "mixed_volume",
+            checker=checker,
+            candidate_gen=candidate_gen,
+            budget_ms=max(0, int((deadline - time.perf_counter()) * 1000 // max(1, len(neighbors) - idx))),
+            ordered_boxes=neighbor,
+            apply_postprocess=True,
+        )
+        if _run_sort_key(candidate) > _run_sort_key(best_run):
+            best_run = candidate
+    return best_run
+
+
+def _generate_order_neighbors(
+    ordered_boxes: Sequence[Box],
+    top_n: int,
+) -> List[List[Box]]:
+    neighbors: List[List[Box]] = []
+    seen = set()
+    prefix = list(ordered_boxes[:top_n])
+    suffix = list(ordered_boxes[top_n:])
+
+    for idx in range(1, top_n):
+        swap_front = list(prefix)
+        swap_front[0], swap_front[idx] = swap_front[idx], swap_front[0]
+        key = tuple(box.sku_id for box in swap_front)
+        if key not in seen:
+            seen.add(key)
+            neighbors.append(swap_front + suffix)
+
+        move_front = list(prefix)
+        box = move_front.pop(idx)
+        move_front.insert(0, box)
+        key = tuple(item.sku_id for item in move_front)
+        if key not in seen:
+            seen.add(key)
+            neighbors.append(move_front + suffix)
+
+        adjacent = list(prefix)
+        adjacent[idx - 1], adjacent[idx] = adjacent[idx], adjacent[idx - 1]
+        key = tuple(box.sku_id for box in adjacent)
+        if key not in seen:
+            seen.add(key)
+            neighbors.append(adjacent + suffix)
+    return neighbors
+
+
+def _repair_candidate_run(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    ranker: Optional[BlockRanker],
+    extractor: Optional[BlockFeatureExtractor],
+    budget_ms: int,
+) -> PolicyRun:
+    if budget_ms <= 0 or not run.placements:
+        return run
+
+    candidates = [run]
+    if run.block_steps:
+        candidates.append(
+            _repair_run(
+                request=request,
+                run=run,
+                checker=checker,
+                ranker=ranker,
+                extractor=extractor,
+                budget_ms=max(20, budget_ms // 2),
+            )
+        )
+    candidates.append(
+        _repair_remove_and_refill(
+            request=request,
+            run=run,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            budget_ms=budget_ms,
+        )
+    )
+    return _select_best_run(candidates)
+
+
+def _repair_remove_and_refill(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    budget_ms: int,
+) -> PolicyRun:
+    if budget_ms <= 0 or len(run.placements) < 3:
+        return run
+
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    offenders = _fragility_offender_signatures(run.placements)
+    remove_count = max(1, math.ceil(len(run.placements) * 0.2))
+    ranked = sorted(
+        run.placements,
+        key=lambda placement: _placement_keep_score(
+            placement, request, total_items, offenders
+        ),
+    )
+    removed = {
+        _placement_signature(placement)
+        for placement in ranked[:remove_count]
+    }
+    kept = [
+        placement
+        for placement in run.placements
+        if _placement_signature(placement) not in removed
+    ]
+    state, _ = _rebuild_state(request, kept)
+    leftover = _remaining_from_placements(request["boxes"], kept)
+    placements, leftover = postprocess(
+        _reindex_placements(kept),
+        leftover,
+        state,
+        checker,
+        ExtremePointManager(request["pallet"]["length_mm"], request["pallet"]["width_mm"]),
+        candidate_gen,
+    )
+    repaired_state, _ = _rebuild_state(request, placements)
+    repaired = PolicyRun(
+        name=f"{run.name}+repair_refill",
+        placements=placements,
+        remaining=leftover,
+        block_steps=[],
+        score=_solution_proxy(repaired_state, total_items),
+        elapsed_ms=run.elapsed_ms + budget_ms,
+        used_model=run.used_model,
+        seed_family=run.seed_family,
+        ordered_skus=run.ordered_skus,
+    )
+    if _run_sort_key(repaired) <= _run_sort_key(run):
+        return run
+    return repaired
+
+
+def _fragility_offender_signatures(
+    placements: Sequence[PlacedBox],
+) -> set[Tuple[str, int, int, int, int]]:
+    offenders: set[Tuple[str, int, int, int, int]] = set()
+    for top in placements:
+        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        for bottom in placements:
+            if not bottom.fragile:
+                continue
+            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON and top.aabb.overlap_area_xy(bottom.aabb) > 0:
+                offenders.add(_placement_signature(top))
+                offenders.add(_placement_signature(bottom))
+    return offenders
+
+
+def _placement_keep_score(
+    placement: PlacedBox,
+    request: Dict[str, Any],
+    total_items: int,
+    offenders: set[Tuple[str, int, int, int, int]],
+) -> float:
+    pallet = request["pallet"]
+    pallet_volume = (
+        pallet["length_mm"] * pallet["width_mm"] * pallet["max_height_mm"]
+    )
+    vol_gain = 0.50 * (
+        placement.aabb.length_x() * placement.aabb.width_y() * placement.aabb.height_z()
+    ) / max(pallet_volume, 1)
+    coverage_gain = 0.30 / max(total_items, 1)
+    floor_bonus = 0.04 * (1.0 - placement.aabb.z_min / max(pallet["max_height_mm"], 1))
+    wall_bonus = 0.02 * int(
+        placement.aabb.x_min == 0
+        or placement.aabb.y_min == 0
+        or placement.aabb.x_max >= pallet["length_mm"]
+        or placement.aabb.y_max >= pallet["width_mm"]
+    )
+    offender_penalty = 0.18 if _placement_signature(placement) in offenders else 0.0
+    return vol_gain + coverage_gain + floor_bonus + wall_bonus - offender_penalty
+
+
+def _placement_signature(placement: PlacedBox) -> Tuple[str, int, int, int, int]:
+    return (
+        placement.sku_id,
+        placement.instance_index,
+        placement.aabb.x_min,
+        placement.aabb.y_min,
+        placement.aabb.z_min,
+    )
+
+
+def _finalize_run(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+) -> Tuple[List[PlacedBox], List[RemainingItem], PalletState]:
+    placements = _reindex_placements(run.placements)
+    leftover = _clone_remaining(run.remaining)
+    final_state, _ = _rebuild_state(request, placements)
+    post_placements, post_leftover = postprocess(
+        _reindex_placements(placements),
+        _clone_remaining(leftover),
+        PalletState(
+            request["pallet"]["length_mm"],
+            request["pallet"]["width_mm"],
+            request["pallet"]["max_height_mm"],
+            request["pallet"]["max_weight_kg"],
+        ),
+        checker,
+        ExtremePointManager(request["pallet"]["length_mm"], request["pallet"]["width_mm"]),
+        candidate_gen,
+    )
+    post_state, _ = _rebuild_state(request, post_placements)
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    if _solution_proxy(post_state, total_items) > _solution_proxy(final_state, total_items) + 1e-9:
+        return post_placements, post_leftover, post_state
+    return placements, leftover, final_state
 
 
 def _construct_with_policy(
