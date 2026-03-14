@@ -160,12 +160,17 @@ def _generate_gap_eps(state: PalletState) -> List[Tuple[int, int, int]]:
     z_tops = sorted({box.z_max for box in state.boxes} | {0})
 
     extra_eps = []
+    x_sorted = sorted(x_coords)
+    y_sorted = sorted(y_coords)
+
     for z in z_tops:
-        for x in sorted(x_coords):
-            for y in sorted(y_coords):
-                if x >= state.pallet.length_mm or y >= state.pallet.width_mm:
-                    continue
-                if z >= state.pallet.max_height_mm:
+        if z >= state.pallet.max_height_mm:
+            continue
+        for x in x_sorted:
+            if x >= state.pallet.length_mm:
+                continue
+            for y in y_sorted:
+                if y >= state.pallet.width_mm:
                     continue
                 # Check not inside any box
                 inside = False
@@ -177,6 +182,9 @@ def _generate_gap_eps(state: PalletState) -> List[Tuple[int, int, int]]:
                         break
                 if not inside:
                     extra_eps.append((x, y, z))
+
+    # Prioritize low z positions (bottom-up filling)
+    extra_eps.sort(key=lambda ep: (ep[2], ep[0], ep[1]))
 
     return extra_eps
 
@@ -266,7 +274,7 @@ def try_insert_unplaced(
                 length_mm=dx, width_mm=dy, height_mm=dz,
                 rotation_code=rot_code,
             ))
-            # Update gap EPs after each insertion
+            # Regenerate gap EPs after insertion to find new positions
             gap_eps = _generate_gap_eps(state)
             all_eps = list(set(state.extreme_points) | set(gap_eps))
             inserted += 1
