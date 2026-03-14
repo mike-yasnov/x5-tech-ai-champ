@@ -296,6 +296,186 @@ def try_insert_unplaced(
     return new_placements, unplaced_list
 
 
+def _find_fragility_violations(
+    placements: List[Placement],
+    boxes_meta: Dict[str, Box],
+) -> List[Tuple[int, int]]:
+    """Find pairs (heavy_idx, fragile_idx) where heavy box rests on fragile box.
+
+    A violation occurs when a box with weight > 2kg is placed directly on top
+    of a fragile box (z_min of heavy == z_max of fragile, with XY overlap).
+    """
+    violations = []
+    for i, p_heavy in enumerate(placements):
+        box_heavy = boxes_meta[p_heavy.sku_id]
+        if box_heavy.weight_kg <= 2.0 or p_heavy.z_mm == 0:
+            continue
+
+        hx1, hy1 = p_heavy.x_mm, p_heavy.y_mm
+        hx2 = hx1 + p_heavy.length_mm
+        hy2 = hy1 + p_heavy.width_mm
+
+        for j, p_frag in enumerate(placements):
+            if i == j:
+                continue
+            box_frag = boxes_meta[p_frag.sku_id]
+            if not box_frag.fragile:
+                continue
+
+            fz_max = p_frag.z_mm + p_frag.height_mm
+            if fz_max != p_heavy.z_mm:
+                continue
+
+            fx1, fy1 = p_frag.x_mm, p_frag.y_mm
+            fx2 = fx1 + p_frag.length_mm
+            fy2 = fy1 + p_frag.width_mm
+
+            overlap = _overlap_area(hx1, hy1, hx2, hy2, fx1, fy1, fx2, fy2)
+            if overlap > 0:
+                violations.append((i, j))
+
+    return violations
+
+
+def _validate_placement_feasibility(
+    pallet: Pallet,
+    placements: List[Placement],
+    boxes_meta: Dict[str, Box],
+) -> bool:
+    """Quick check that all placements are feasible (bounds, collision, support)."""
+    state = PalletState(pallet)
+    # Sort by z so we can validate support incrementally
+    sorted_placements = sorted(placements, key=lambda p: p.z_mm)
+    for p in sorted_placements:
+        box = boxes_meta[p.sku_id]
+        if not state.can_place(
+            p.length_mm, p.width_mm, p.height_mm,
+            p.x_mm, p.y_mm, p.z_mm,
+            box.weight_kg, box.fragile, box.stackable,
+        ):
+            return False
+        state.place(
+            p.sku_id, p.length_mm, p.width_mm, p.height_mm,
+            p.x_mm, p.y_mm, p.z_mm,
+            box.weight_kg, box.fragile, box.stackable,
+        )
+    return True
+
+
+def reorder_fragile(
+    pallet: Pallet,
+    placements: List[Placement],
+    boxes_meta: Dict[str, Box],
+) -> List[Placement]:
+    """Reduce fragility violations by removing violating items and repacking.
+
+    Strategy: find all boxes involved in violations, remove them from solution,
+    then repack in order: heavy non-fragile first, then light/fragile items.
+    """
+    if not placements:
+        return placements
+
+    violations = _find_fragility_violations(placements, boxes_meta)
+    if not violations:
+        return placements
+
+    # Collect unique indices of all violating boxes
+    violating_indices = set()
+    for heavy_idx, frag_idx in violations:
+        violating_indices.add(heavy_idx)
+        violating_indices.add(frag_idx)
+
+    # Split into kept and removed
+    kept = []
+    removed_items = []
+    for i, p in enumerate(placements):
+        if i in violating_indices:
+            box = boxes_meta[p.sku_id]
+            removed_items.append((box, p.instance_index))
+        else:
+            kept.append(p)
+
+    # Sort removed: non-fragile heavy first, then fragile heavy, then light fragile
+    def _reorder_key(item):
+        box, _ = item
+        if not box.fragile:
+            return (0, -box.weight_kg)
+        if box.weight_kg > 2.0:
+            return (1, -box.weight_kg)
+        return (2, -box.weight_kg)
+
+    removed_items.sort(key=_reorder_key)
+
+    # Rebuild state from kept placements
+    state = PalletState(pallet)
+    for p in kept:
+        box = boxes_meta[p.sku_id]
+        state.place(
+            p.sku_id, p.length_mm, p.width_mm, p.height_mm,
+            p.x_mm, p.y_mm, p.z_mm,
+            box.weight_kg, box.fragile, box.stackable,
+        )
+
+    # Generate gap EPs for better coverage
+    gap_eps = _generate_gap_eps(state)
+    all_eps = list(set(state.extreme_points) | set(gap_eps))
+
+    # Repack removed items using greedy EP placement
+    # Use fill_heavy profile to push heavy items down
+    repacked = list(kept)
+    for box, inst_idx in removed_items:
+        orientations = get_orientations(box)
+        best_score = -1.0
+        best_placement = None
+
+        for ep in all_eps:
+            ex, ey, ez = ep
+            for dx, dy, dz, rot_code in orientations:
+                if not state.can_place(
+                    dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile, box.stackable,
+                ):
+                    continue
+                sc = score_placement(
+                    state, dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile,
+                    weight_profile="fill_heavy",
+                )
+                # Extra penalty for placing heavy on fragile at this position
+                if box.weight_kg > 2.0 and ez > 0:
+                    fragile_below = state.get_fragile_boxes_at_top(ez, ex, ey, ex + dx, ey + dy)
+                    if fragile_below:
+                        sc -= 0.5
+                if sc > best_score:
+                    best_score = sc
+                    best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+
+        if best_placement:
+            dx, dy, dz, px, py, pz, rot_code = best_placement
+            state.place(
+                box.sku_id, dx, dy, dz, px, py, pz,
+                box.weight_kg, box.fragile, box.stackable,
+            )
+            repacked.append(Placement(
+                sku_id=box.sku_id,
+                instance_index=inst_idx,
+                x_mm=px, y_mm=py, z_mm=pz,
+                length_mm=dx, width_mm=dy, height_mm=dz,
+                rotation_code=rot_code,
+            ))
+
+    # Only accept if we didn't lose items AND reduced violations
+    new_violations = len(_find_fragility_violations(repacked, boxes_meta))
+    if len(repacked) >= len(placements) and new_violations < len(violations):
+        logger.info("[fragile_reorder] fixed %d->%d violations (removed %d, repacked %d)",
+                    len(violations), new_violations, len(violating_indices), len(repacked) - len(kept))
+        return repacked
+
+    logger.debug("[fragile_reorder] repack didn't improve: %d violations, %d items (was %d items, %d violations)",
+                 new_violations, len(repacked), len(placements), len(violations))
+    return placements
+
+
 def postprocess_solution(
     task_id: str,
     pallet: Pallet,
@@ -312,7 +492,10 @@ def postprocess_solution(
     # Step 1: Compact downward (fast)
     placements = compact_downward(pallet, list(solution.placements), boxes_meta)
 
-    # Step 2: Try insert unplaced items (can be slow)
+    # Step 2: Reorder to reduce fragility violations (fast)
+    placements = reorder_fragile(pallet, placements, boxes_meta)
+
+    # Step 3: Try insert unplaced items (can be slow)
     elapsed = (_time.perf_counter() - t0) * 1000
     remaining = time_budget_ms - elapsed
     if remaining > 50:
@@ -335,7 +518,7 @@ def postprocess_solution(
                     reason="no_space",
                 ))
 
-    # Step 3: Compact again after insertions (fast)
+    # Step 4: Compact again after insertions (fast)
     if len(placements) > len(solution.placements):
         placements = compact_downward(pallet, placements, boxes_meta)
 
