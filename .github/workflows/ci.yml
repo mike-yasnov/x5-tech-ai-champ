@@ -102,7 +102,7 @@ jobs:
             const allValid = results.every(r => r.valid);
             const status = allValid ? '✅' : '❌';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const vizSection = `\n\n### 3D Visualizations\n\nInteractive 3D pallet views available as build artifacts:\n\n[Download visualizations](${runUrl}) -> Artifacts -> \`3d-pallet-visualizations\``;
+            const vizSection = `\n\n### 🎨 3D Visualizations\n\nInteractive 3D pallet views available as build artifacts:\n\n📦 [Download visualizations](${runUrl}) → Artifacts → \`3d-pallet-visualizations\`\n\nOpen the HTML files in a browser to rotate, zoom, and inspect placements.`;
             const body = `### ${status} Benchmark Results\n\n${output}\n\n### Strategy Comparison (Top 8 per scenario)\n\n${strategyOutput}\n\nFull strategy benchmark is attached in CI artifacts as \`strategy_results.json\` and \`strategy_output_full.md\`. ${vizSection}\n\n---\n*Automated benchmark by CI*`;
 
             const { data: comments } = await github.rest.issues.listComments({
