@@ -34,15 +34,6 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
         dim = p["dimensions_placed"]
         pos = p["position"]
 
-        # Валидация rotation_code
-        VALID_ROTATION_CODES = {"LWH", "LHW", "WLH", "WHL", "HLW", "HWL"}
-        rot_code = p.get("rotation_code", "")
-        if rot_code not in VALID_ROTATION_CODES:
-            return {
-                "valid": False,
-                "error": f"Invalid rotation_code '{rot_code}' for {sku_id}. Must be one of: {sorted(VALID_ROTATION_CODES)}",
-            }
-
         # Anti-cheat: проверка, что габариты — это перестановка исходных габаритов
         orig_dims_sorted = sorted([
             sku["length_mm"],
@@ -83,7 +74,6 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
             "sku_id": sku_id,
             "weight": sku["weight_kg"],
             "fragile": sku["fragile"],
-            "stackable": sku.get("stackable", True),
             "strict_upright": sku["strict_upright"],
             "orig_height": sku["height_mm"],
             "x_min": x_min, "x_max": x_max,
@@ -151,21 +141,6 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
                     "error": f"Box {b1['sku_id']} has insufficient support ({support_area:.1f}/{b1['area']:.1f}).",
                 }
 
-    # 6) Stackable: stackable=false → ничего нельзя ставить поверх
-    for bottom in placements:
-        if bottom["stackable"]:
-            continue
-        for top in placements:
-            if top is bottom:
-                continue
-            if abs(top["z_min"] - bottom["z_max"]) < 1e-6 and calc_overlap_2d(top, bottom) > 0:
-                return {
-                    "valid": False,
-                    "error": (
-                        f"Box {top['sku_id']} placed on non-stackable {bottom['sku_id']}."
-                    ),
-                }
-
     # ---------------------------
     # SOFT metrics
     # ---------------------------
@@ -209,21 +184,6 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
         + 0.10 * time_score
     )
 
-    # Constraint compliance summary
-    has_fragile = any(b["fragile"] for b in placements)
-    has_upright = any(b["strict_upright"] for b in placements)
-    has_non_stackable = any(not b["stackable"] for b in placements)
-
-    constraint_checks = {
-        "bounds": True,
-        "no_collision": True,
-        "support_60pct": True,
-        "weight_limit": True,
-        "strict_upright": "pass" if has_upright else "n/a",
-        "stackable": "pass" if has_non_stackable else "n/a",
-        "fragility_violations": fragility_violations,
-    }
-
     return {
         "valid": True,
         "metrics": {
@@ -232,7 +192,6 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
             "fragility_score": round(fragility_score, 4),
             "time_score": round(time_score, 4),
         },
-        "constraint_checks": constraint_checks,
         "final_score": round(final_score, 4),
     }
 

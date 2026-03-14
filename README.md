@@ -20,10 +20,11 @@
 │   ├── __init__.py
 │   ├── models.py          # Модели данных: Box, Pallet, Placement, Solution
 │   ├── orientations.py    # Генерация допустимых ориентаций (strict_upright)
-│   ├── pallet_state.py    # Состояние паллеты: Extreme Points, проверки
-│   ├── scoring.py         # Scoring-функция для ранжирования кандидатов
-│   ├── packer.py          # Greedy packer: основной цикл размещения
-│   ├── solver.py          # Multi-restart обёртка
+│   ├── pallet_state.py    # Baseline-состояние паллеты для unit-тестов и сравнения
+│   ├── scoring.py         # Baseline scoring-функция
+│   ├── packer.py          # Baseline greedy packer
+│   ├── solver.py          # Публичный entrypoint: адаптер к hybrid solver
+│   ├── hybrid/            # Порт метода из sol/ (beam search + postprocess)
 │   ├── cli.py             # CLI-интерфейс
 │   └── __main__.py        # Запуск через python -m solver
 ├── tests/                 # Тесты
@@ -80,10 +81,10 @@ git checkout -b my-improvement
 
 | Файл | Что менять |
 |------|-----------|
-| `solver/scoring.py` | Веса и компоненты scoring-функции |
-| `solver/packer.py` | Алгоритм упаковки, стратегии сортировки |
-| `solver/solver.py` | Multi-restart логика, параметры |
-| `solver/pallet_state.py` | Extreme Points, проверки, новые предикаты |
+| `solver/hybrid/pipeline.py` | Оркестрация hybrid solver и параметры поиска |
+| `solver/hybrid/search.py` | Beam search / greedy fallback и ranking |
+| `solver/hybrid/postprocess.py` | Уплотнение, fragile reorder, дозаполнение |
+| `solver/solver.py` | Публичный API и адаптер dataclass <-> request/response |
 
 ### 3. Проверить локально
 
@@ -194,7 +195,7 @@ final_score = 0.50 × volume_utilization
 
 </details>
 
-## Baseline Benchmark (отправная точка)
+## Legacy Baseline Benchmark
 
 | Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
 |----------|-------|--------|----------|-----------|------------|--------|-----------|
@@ -204,24 +205,25 @@ final_score = 0.50 × volume_utilization
 | random_mixed | **0.7023** | 0.8198 | 0.4579 | 0.5500 | 1.0000 | 49/107 | 112 |
 | **Average** | **0.6879** | | | | | | |
 
-> Дата: 2026-03-14. Solver v1.0.0, greedy + multi-restart (5 стратегий), budget 900ms.
+> Дата: 2026-03-14. Это baseline-замер для greedy + multi-restart v1.0.0. Текущий default solver в репозитории уже использует hybrid search из `sol/`.
 
-## Архитектура baseline-солвера
+## Архитектура текущего default-солвера
 
-**Extreme Points + Greedy + Multi-restart**
+**Extreme Points + Hybrid Beam Search + Postprocess**
 
 1. **Extreme Points** — генерация кандидатных позиций (не полный перебор x,y,z)
-2. **Greedy packer** — для каждого короба выбирает лучшую позицию × ориентацию по scoring-функции
-3. **Multi-restart** — прогоняет 5 стратегий сортировки, выбирает лучший скор
+2. **Candidate generation** — перебираем EP × ориентации с полными hard-constraint checks
+3. **Hybrid search** — beam search по последовательностям укладки, с эвристическим ranking и опциональной HYB-моделью
+4. **Postprocess** — compact-downward, fragile reorder, повторная вставка unplaced
 
-Стратегии сортировки: `volume_desc`, `weight_desc`, `base_area_desc`, `density_desc`, `constrained_first`
+Baseline greedy-модули (`solver/packer.py`, `solver/scoring.py`, `solver/pallet_state.py`) сохранены для unit-тестов и сравнительных бенчмарков.
 
 ## Направления улучшений
 
-- [ ] Beam search вместо greedy (ширина луча = качество vs скорость)
+- [x] Beam search вместо greedy
 - [ ] Layer-based packing (укладка слоями)
 - [ ] LNS (Large Neighborhood Search) — локальный поиск с перестроением
-- [ ] Тюнинг весов scoring-функции
-- [ ] Больше стратегий сортировки для multi-restart
+- [ ] Тюнинг эвристики / HYB ranking
+- [ ] Больше стратегий для postprocess и локального улучшения
 - [ ] Учёт `stackable: false` в валидаторе
 - [ ] 3D-визуализация (plotly/matplotlib)

@@ -1,3 +1,3 @@
-"""3D Pallet Packing Solver — baseline greedy with multi-restart."""
+"""3D Pallet Packing Solver with a hybrid search default and baseline utilities."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
