@@ -189,6 +189,7 @@ def build_viz_data(results: list) -> list:
                     "width_mm": dim["width_mm"],
                     "height_mm": dim["height_mm"],
                     "fragile": sku.get("fragile", False),
+                    "weight_kg": sku.get("weight_kg", 0),
                 }
             )
         viz.append(
