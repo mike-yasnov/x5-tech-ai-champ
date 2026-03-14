@@ -166,9 +166,20 @@ def perturb_boxes(boxes: List[Box], noise_factor: float) -> List[Box]:
         return items
     swaps = max(1, int(len(items) * noise_factor))
     for _ in range(swaps):
-        i = random.randint(0, len(items) - 2)
-        j = min(len(items) - 1, i + random.randint(1, min(5, len(items) - i - 1)))
-        items[i], items[j] = items[j], items[i]
+        move_type = random.random()
+        if move_type < 0.45:
+            i = random.randint(0, len(items) - 2)
+            j = min(len(items) - 1, i + random.randint(1, min(5, len(items) - i - 1)))
+            items[i], items[j] = items[j], items[i]
+        elif move_type < 0.75:
+            i, j = random.sample(range(len(items)), 2)
+            items[i], items[j] = items[j], items[i]
+        else:
+            start = random.randint(0, len(items) - 2)
+            window = min(len(items) - start, random.randint(2, min(6, len(items))))
+            chunk = items[start : start + window]
+            random.shuffle(chunk)
+            items[start : start + window] = chunk
     return items
 
 
