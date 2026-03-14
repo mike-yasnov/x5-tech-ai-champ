@@ -189,6 +189,14 @@ class PalletState:
         # Deduplicate
         self.extreme_points = list(set(valid_eps))
 
+    def get_support_area(self, x1: int, y1: int, x2: int, y2: int, z: int) -> int:
+        """Calculate total support area at given z level for the XY rectangle."""
+        support = 0
+        for box in self.boxes:
+            if box.z_max == z:
+                support += _overlap_area(x1, y1, x2, y2, box.x_min, box.y_min, box.x_max, box.y_max)
+        return support
+
     def get_fragile_boxes_at_top(self, z: int, x1: int, y1: int, x2: int, y2: int) -> List[PlacedBox]:
         """Find fragile boxes whose top face is at z and overlap with given XY rectangle."""
         result = []
