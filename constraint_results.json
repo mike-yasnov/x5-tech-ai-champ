@@ -1,0 +1,2614 @@
+[
+  {
+    "task_id": "dim_exact_fill_1box",
+    "constraint_group": "dimensions",
+    "description": "1 box = pallet size -> perfect fit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1206,
+    "error": null
+  },
+  {
+    "task_id": "dim_4tile_floor",
+    "constraint_group": "dimensions",
+    "description": "4 boxes tile 600x400 floor exactly (1 layer)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "dim_8tile_2layers",
+    "constraint_group": "dimensions",
+    "description": "8 boxes tile 600x400x400 exactly (2 layers)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 8,
+    "solve_time_ms": 3,
+    "wall_time_ms": 4,
+    "error": null
+  },
+  {
+    "task_id": "dim_max_height_exact",
+    "constraint_group": "dimensions",
+    "description": "Box height == pallet max_height exactly",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "dim_tiny_box",
+    "constraint_group": "dimensions",
+    "description": "Minimum-size box (1x1x1 mm)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5,
+    "metrics": {
+      "volume_utilization": 0.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "dim_rotation_needed",
+    "constraint_group": "dimensions",
+    "description": "Box must be rotated to fit within height limit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "collision_cubes_27",
+    "constraint_group": "collisions",
+    "description": "27 cubes must fill 300^3 without any overlap",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 27,
+    "total_items": 27,
+    "solve_time_ms": 18,
+    "wall_time_ms": 19,
+    "error": null
+  },
+  {
+    "task_id": "collision_two_sizes",
+    "constraint_group": "collisions",
+    "description": "Two sizes share floor: 400x400 + 2x200x200 fill 600x400",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 3,
+    "total_items": 3,
+    "solve_time_ms": 8,
+    "wall_time_ms": 8,
+    "error": null
+  },
+  {
+    "task_id": "collision_cubes_64",
+    "constraint_group": "collisions",
+    "description": "64 cubes fill 400^3 _ collision-free grid",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 64,
+    "total_items": 64,
+    "solve_time_ms": 63,
+    "wall_time_ms": 64,
+    "error": null
+  },
+  {
+    "task_id": "support_full",
+    "constraint_group": "support",
+    "description": "Two stacked boxes: upper has 100% support",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "support_borderline_ok",
+    "constraint_group": "support",
+    "description": "Upper box fits entirely on base -> 100% support easy",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.9167,
+    "metrics": {
+      "volume_utilization": 0.8333,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "support_tower_5",
+    "constraint_group": "support",
+    "description": "Tower of 5 identical boxes _ each layer supported by one below",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 5,
+    "total_items": 5,
+    "solve_time_ms": 1,
+    "wall_time_ms": 4,
+    "error": null
+  },
+  {
+    "task_id": "support_bridging",
+    "constraint_group": "support",
+    "description": "Upper box bridges two base boxes for combined support",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 3,
+    "total_items": 3,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "upright_native_only",
+    "constraint_group": "upright",
+    "description": "strict_upright box placed in native H orientation",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5625,
+    "metrics": {
+      "volume_utilization": 0.125,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 3,
+    "wall_time_ms": 3,
+    "error": null
+  },
+  {
+    "task_id": "upright_all_boxes",
+    "constraint_group": "upright",
+    "description": "All 4 boxes strict_upright _ must keep H on Z axis",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "upright_mixed",
+    "constraint_group": "upright",
+    "description": "Mix of strict_upright and freely rotatable boxes",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 0.8333333333333334,
+        "actual": 0.8333,
+        "pass": true
+      }
+    ],
+    "final_score": 0.9167,
+    "metrics": {
+      "volume_utilization": 0.8333,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 8,
+    "solve_time_ms": 6,
+    "wall_time_ms": 6,
+    "error": null
+  },
+  {
+    "task_id": "upright_no_extra_rotation",
+    "constraint_group": "upright",
+    "description": "Upright boxes where rotation is tempting but forbidden",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 8,
+    "solve_time_ms": 4,
+    "wall_time_ms": 5,
+    "error": null
+  },
+  {
+    "task_id": "volume_perfect",
+    "constraint_group": "volume",
+    "description": "Volume utilization = 1.0 (perfect fill)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "volume_50pct",
+    "constraint_group": "volume",
+    "description": "Volume = 0.5 (box fills half of pallet height)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 0.5,
+        "actual": 0.5,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "volume_25pct",
+    "constraint_group": "volume",
+    "description": "Volume = 0.25 (one box is 1/4 of pallet volume)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 0.25,
+        "actual": 0.25,
+        "pass": true
+      }
+    ],
+    "final_score": 0.625,
+    "metrics": {
+      "volume_utilization": 0.25,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "volume_75pct",
+    "constraint_group": "volume",
+    "description": "Volume = 0.75 (3 tall boxes fill 3/4 of pallet)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "exact_volume",
+        "expected": 0.75,
+        "actual": 0.75,
+        "pass": true
+      }
+    ],
+    "final_score": 0.875,
+    "metrics": {
+      "volume_utilization": 0.75,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 3,
+    "total_items": 3,
+    "solve_time_ms": 2,
+    "wall_time_ms": 3,
+    "error": null
+  },
+  {
+    "task_id": "coverage_full",
+    "constraint_group": "coverage",
+    "description": "All items fit -> coverage = 1.0",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "coverage_weight_limited",
+    "constraint_group": "coverage",
+    "description": "Weight limit allows only 1 of 2 boxes -> coverage >= 0.5",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 0.5,
+        "pass": true
+      }
+    ],
+    "final_score": 0.475,
+    "metrics": {
+      "volume_utilization": 0.25,
+      "item_coverage": 0.5,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "coverage_height_limited",
+    "constraint_group": "coverage",
+    "description": "Only 1 of 2 full-floor boxes fits (height limit) -> coverage = 0.5",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 0.5,
+        "actual": 0.5,
+        "pass": true
+      }
+    ],
+    "final_score": 0.85,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 0.5,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 2,
+    "solve_time_ms": 4,
+    "wall_time_ms": 4,
+    "error": null
+  },
+  {
+    "task_id": "coverage_space_limited",
+    "constraint_group": "coverage",
+    "description": "5 boxes requested, only 4 fit on floor -> coverage = 0.8",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 0.8,
+        "actual": 0.8,
+        "pass": true
+      }
+    ],
+    "final_score": 0.94,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 0.8,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 5,
+    "solve_time_ms": 5,
+    "wall_time_ms": 7,
+    "error": null
+  },
+  {
+    "task_id": "coverage_mixed_partial",
+    "constraint_group": "coverage",
+    "description": "Mixed SKUs: large + small; 4 of 5 items fit -> coverage >= 0.8",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.8,
+        "actual": 0.8,
+        "pass": true
+      }
+    ],
+    "final_score": 0.94,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 0.8,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 5,
+    "solve_time_ms": 5,
+    "wall_time_ms": 6,
+    "error": null
+  },
+  {
+    "task_id": "coverage_zero_oversize",
+    "constraint_group": "coverage",
+    "description": "Box larger than pallet in all dims -> coverage = 0.0",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 0.0,
+        "actual": 0.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.2,
+    "metrics": {
+      "volume_utilization": 0.0,
+      "item_coverage": 0.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 0,
+    "total_items": 1,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "fragile_none",
+    "constraint_group": "fragility",
+    "description": "No fragile boxes -> fragility_score = 1.0",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "fragile_all_light",
+    "constraint_group": "fragility",
+    "description": "All fragile but light (_2kg) -> no violations -> fragility = 1.0",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "fragile_heavy_on_fragile",
+    "constraint_group": "fragility",
+    "description": "Heavy + fragile: solver should place heavy below fragile",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.95,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "fragile_multi_stress",
+    "constraint_group": "fragility",
+    "description": "4 fragile + 4 heavy boxes: solver should minimize fragility violations",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.8,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.8333,
+    "metrics": {
+      "volume_utilization": 0.6667,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 8,
+    "solve_time_ms": 37,
+    "wall_time_ms": 38,
+    "error": null
+  },
+  {
+    "task_id": "fragile_order_matters",
+    "constraint_group": "fragility",
+    "description": "2 full-floor boxes: solver must put heavy below fragile",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 4,
+    "wall_time_ms": 4,
+    "error": null
+  },
+  {
+    "task_id": "fragile_boundary_2kg",
+    "constraint_group": "fragility",
+    "description": "2.0 kg box on fragile -> no violation (threshold is >2.0)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "fragile_boundary_2_01kg",
+    "constraint_group": "fragility",
+    "description": "2.01 kg on fragile: solver should put heavy below -> fragility=1.0",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.95,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "time_trivial",
+    "constraint_group": "time",
+    "description": "Single box -> solve < 1s",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "max_time_ms",
+        "expected": 1000,
+        "actual": 1,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "time_medium_20",
+    "constraint_group": "time",
+    "description": "20 items -> solve < 5s",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "max_time_ms",
+        "expected": 5000,
+        "actual": 45,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5694,
+    "metrics": {
+      "volume_utilization": 0.1389,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 20,
+    "total_items": 20,
+    "solve_time_ms": 45,
+    "wall_time_ms": 45,
+    "error": null
+  },
+  {
+    "task_id": "time_large_100",
+    "constraint_group": "time",
+    "description": "100 items -> solve < 30s",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "max_time_ms",
+        "expected": 30000,
+        "actual": 1094,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5568,
+    "metrics": {
+      "volume_utilization": 0.1736,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 0.7
+    },
+    "placed": 100,
+    "total_items": 100,
+    "solve_time_ms": 1094,
+    "wall_time_ms": 1095,
+    "error": null
+  },
+  {
+    "task_id": "time_stress_200",
+    "constraint_group": "time",
+    "description": "200 items, 4 SKUs -> solve < 30s",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "max_time_ms",
+        "expected": 30000,
+        "actual": 1847,
+        "pass": true
+      }
+    ],
+    "final_score": 0.776,
+    "metrics": {
+      "volume_utilization": 0.612,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 0.7
+    },
+    "placed": 200,
+    "total_items": 200,
+    "solve_time_ms": 1847,
+    "wall_time_ms": 1848,
+    "error": null
+  },
+  {
+    "task_id": "weight_exact_limit",
+    "constraint_group": "weight",
+    "description": "Total weight (40kg) = max_weight_kg exactly -> all fit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 2,
+    "wall_time_ms": 3,
+    "error": null
+  },
+  {
+    "task_id": "weight_partial",
+    "constraint_group": "weight",
+    "description": "Weight limit 25kg, 3x10kg boxes -> only 2 fit -> coverage >= 0.66",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.66,
+        "actual": 0.6667,
+        "pass": true
+      }
+    ],
+    "final_score": 0.4556,
+    "metrics": {
+      "volume_utilization": 0.1111,
+      "item_coverage": 0.6667,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 3,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "weight_single_overweight",
+    "constraint_group": "weight",
+    "description": "Single box exceeds max_weight -> coverage = 0.0",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 0.0,
+        "actual": 0.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.2,
+    "metrics": {
+      "volume_utilization": 0.0,
+      "item_coverage": 0.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 0,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "stackable_single",
+    "constraint_group": "stackable",
+    "description": "Single non-stackable box -> valid (nothing on top)",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 1,
+    "total_items": 1,
+    "solve_time_ms": 0,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "stackable_beside",
+    "constraint_group": "stackable",
+    "description": "Non-stackable + stackable side by side -> both fit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 1.0,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 2,
+    "total_items": 2,
+    "solve_time_ms": 1,
+    "wall_time_ms": 1,
+    "error": null
+  },
+  {
+    "task_id": "stackable_caps_mixed",
+    "constraint_group": "stackable",
+    "description": "4 stackable + 2 non-stackable caps -> solver respects constraint",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.83,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 6,
+    "total_items": 6,
+    "solve_time_ms": 4,
+    "wall_time_ms": 4,
+    "error": null
+  },
+  {
+    "task_id": "combined_upright_fragile_weight",
+    "constraint_group": "combined",
+    "description": "Upright fragile boxes + heavy boxes + weight limit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.8,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.75,
+    "metrics": {
+      "volume_utilization": 0.5,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 6,
+    "total_items": 6,
+    "solve_time_ms": 7,
+    "wall_time_ms": 7,
+    "error": null
+  },
+  {
+    "task_id": "combined_ns_fragile_upright",
+    "constraint_group": "combined",
+    "description": "Non-stackable + fragile + upright caps on stackable base",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.83,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.875,
+    "metrics": {
+      "volume_utilization": 0.75,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 6,
+    "total_items": 6,
+    "solve_time_ms": 3,
+    "wall_time_ms": 4,
+    "error": null
+  },
+  {
+    "task_id": "hard_weight_exact",
+    "constraint_group": "hard_weight",
+    "description": "4x25kg = 100kg = max_weight exactly -> all must fit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "exact_coverage",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.537,
+    "metrics": {
+      "volume_utilization": 0.0741,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 4,
+    "total_items": 4,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
+    "error": null
+  },
+  {
+    "task_id": "hard_weight_overflow_1",
+    "constraint_group": "hard_weight",
+    "description": "6x10kg=60kg > 50kg limit -> at least 5 placed",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.83,
+        "actual": 0.8333,
+        "pass": true
+      }
+    ],
+    "final_score": 0.4616,
+    "metrics": {
+      "volume_utilization": 0.0231,
+      "item_coverage": 0.8333,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 5,
+    "total_items": 6,
+    "solve_time_ms": 8,
+    "wall_time_ms": 9,
+    "error": null
+  },
+  {
+    "task_id": "hard_weight_one_heavy",
+    "constraint_group": "hard_weight",
+    "description": "1 anchor (180kg) + 50 light (0.5kg), limit 200kg",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.8,
+        "actual": 0.9804,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5086,
+    "metrics": {
+      "volume_utilization": 0.0289,
+      "item_coverage": 0.9804,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 50,
+    "total_items": 51,
+    "solve_time_ms": 770,
+    "wall_time_ms": 770,
+    "error": null
+  },
+  {
+    "task_id": "hard_weight_uniform_cutoff",
+    "constraint_group": "hard_weight",
+    "description": "12x15kg=180kg > 120kg -> max 8 boxes",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.66,
+        "actual": 0.6667,
+        "pass": true
+      }
+    ],
+    "final_score": 0.4833,
+    "metrics": {
+      "volume_utilization": 0.1667,
+      "item_coverage": 0.6667,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 12,
+    "solve_time_ms": 55,
+    "wall_time_ms": 56,
+    "error": null
+  },
+  {
+    "task_id": "hard_weight_greedy_trap",
+    "constraint_group": "hard_weight",
+    "description": "Greedy trap: 4 big light (2kg) + 5 small heavy (18kg), limit 80kg",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.55,
+        "actual": 0.8889,
+        "pass": true
+      }
+    ],
+    "final_score": 0.583,
+    "metrics": {
+      "volume_utilization": 0.2326,
+      "item_coverage": 0.8889,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 9,
+    "solve_time_ms": 78,
+    "wall_time_ms": 79,
+    "error": null
+  },
+  {
+    "task_id": "hard_support_borderline",
+    "constraint_group": "hard_support",
+    "description": "Top bridgers need >=60% support from base grid",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.83,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.8333,
+    "metrics": {
+      "volume_utilization": 0.6667,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 6,
+    "total_items": 6,
+    "solve_time_ms": 4,
+    "wall_time_ms": 6,
+    "error": null
+  },
+  {
+    "task_id": "hard_support_staircase",
+    "constraint_group": "hard_support",
+    "description": "12 step blocks (400x400x200) - staircase packing challenge",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.75,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7,
+    "metrics": {
+      "volume_utilization": 0.4,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 12,
+    "total_items": 12,
+    "solve_time_ms": 10,
+    "wall_time_ms": 11,
+    "error": null
+  },
+  {
+    "task_id": "hard_support_platform",
+    "constraint_group": "hard_support",
+    "description": "Large top boxes need platform of small bases for 60% support",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.85,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7344,
+    "metrics": {
+      "volume_utilization": 0.4688,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 14,
+    "total_items": 14,
+    "solve_time_ms": 27,
+    "wall_time_ms": 27,
+    "error": null
+  },
+  {
+    "task_id": "hard_support_height_mismatch",
+    "constraint_group": "hard_support",
+    "description": "Mixed base heights (300mm vs 200mm) - top can't lay flat easily",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.66,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7812,
+    "metrics": {
+      "volume_utilization": 0.5625,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 9,
+    "total_items": 9,
+    "solve_time_ms": 20,
+    "wall_time_ms": 21,
+    "error": null
+  },
+  {
+    "task_id": "hard_support_mosaic_floor",
+    "constraint_group": "hard_support",
+    "description": "64 small tiles must form solid floor for 2 heavy slabs",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.9,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6667,
+    "metrics": {
+      "volume_utilization": 0.3333,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 66,
+    "total_items": 66,
+    "solve_time_ms": 715,
+    "wall_time_ms": 716,
+    "error": null
+  },
+  {
+    "task_id": "hard_fragile_all",
+    "constraint_group": "hard_fragile",
+    "description": "All 20 boxes fragile+heavy(5kg) -> every stack = violation",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.6,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6883,
+    "metrics": {
+      "volume_utilization": 0.4167,
+      "item_coverage": 1.0,
+      "fragility_score": 0.8,
+      "time_score": 1.0
+    },
+    "placed": 20,
+    "total_items": 20,
+    "solve_time_ms": 224,
+    "wall_time_ms": 225,
+    "error": null
+  },
+  {
+    "task_id": "hard_fragile_big_bottom_dilemma",
+    "constraint_group": "hard_fragile",
+    "description": "Big fragile (3kg) best on bottom by volume, but must go on top",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.75,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.7,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6875,
+    "metrics": {
+      "volume_utilization": 0.375,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 12,
+    "total_items": 12,
+    "solve_time_ms": 120,
+    "wall_time_ms": 121,
+    "error": null
+  },
+  {
+    "task_id": "hard_fragile_interleave",
+    "constraint_group": "hard_fragile",
+    "description": "Heavy-fragile-heavy sandwich -> naive layering creates violations",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.55,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.7,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.95,
+    "metrics": {
+      "volume_utilization": 0.9,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 18,
+    "total_items": 18,
+    "solve_time_ms": 405,
+    "wall_time_ms": 406,
+    "error": null
+  },
+  {
+    "task_id": "hard_fragile_singleton",
+    "constraint_group": "hard_fragile",
+    "description": "1 precious fragile among 8 heavy -> must go on top",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.88,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 1.0,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6276,
+    "metrics": {
+      "volume_utilization": 0.2552,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 9,
+    "total_items": 9,
+    "solve_time_ms": 14,
+    "wall_time_ms": 15,
+    "error": null
+  },
+  {
+    "task_id": "hard_fragile_nonstackable",
+    "constraint_group": "hard_fragile",
+    "description": "Fragile + non-stackable: double constraint",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.66,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.8,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7344,
+    "metrics": {
+      "volume_utilization": 0.4688,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 18,
+    "total_items": 18,
+    "solve_time_ms": 110,
+    "wall_time_ms": 111,
+    "error": null
+  },
+  {
+    "task_id": "hard_upright_all",
+    "constraint_group": "hard_upright",
+    "description": "All 12 boxes upright-only (350x250x400) - fixed H=400mm",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.75,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7734,
+    "metrics": {
+      "volume_utilization": 0.5469,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 12,
+    "total_items": 12,
+    "solve_time_ms": 6,
+    "wall_time_ms": 7,
+    "error": null
+  },
+  {
+    "task_id": "hard_upright_gap_fill",
+    "constraint_group": "hard_upright",
+    "description": "Upright tall (500mm) + flexible fillers for gaps",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7734,
+    "metrics": {
+      "volume_utilization": 0.5469,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 26,
+    "total_items": 26,
+    "solve_time_ms": 169,
+    "wall_time_ms": 170,
+    "error": null
+  },
+  {
+    "task_id": "hard_nostack_tall",
+    "constraint_group": "hard_upright",
+    "description": "6 tall non-stackable (600mm) waste vertical + 30 short fillers",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 0.9167,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6278,
+    "metrics": {
+      "volume_utilization": 0.3056,
+      "item_coverage": 0.9167,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 33,
+    "total_items": 36,
+    "solve_time_ms": 172,
+    "wall_time_ms": 172,
+    "error": null
+  },
+  {
+    "task_id": "hard_triple_constraint",
+    "constraint_group": "hard_upright",
+    "description": "Triple: upright + fragile non-stackable + normal",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.66,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.8,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6312,
+    "metrics": {
+      "volume_utilization": 0.2625,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 18,
+    "total_items": 18,
+    "solve_time_ms": 141,
+    "wall_time_ms": 142,
+    "error": null
+  },
+  {
+    "task_id": "hard_nostack_flat",
+    "constraint_group": "hard_upright",
+    "description": "8 flat non-stackable (100mm) waste ceiling + 10 cubes",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.55,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5917,
+    "metrics": {
+      "volume_utilization": 0.1833,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 18,
+    "total_items": 18,
+    "solve_time_ms": 41,
+    "wall_time_ms": 41,
+    "error": null
+  },
+  {
+    "task_id": "hard_tetris_exact",
+    "constraint_group": "hard_tightfit",
+    "description": "Tetris exact: 4 half-slabs + 4 quarter-blocks in 600x400x400",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 0.625,
+        "pass": true
+      }
+    ],
+    "final_score": 0.8875,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 0.625,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 5,
+    "total_items": 8,
+    "solve_time_ms": 11,
+    "wall_time_ms": 11,
+    "error": null
+  },
+  {
+    "task_id": "hard_oversized",
+    "constraint_group": "hard_tightfit",
+    "description": "2 too-wide (1300mm) + 1 too-tall upright (1900mm) can't fit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.76,
+        "actual": 0.9231,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6019,
+    "metrics": {
+      "volume_utilization": 0.25,
+      "item_coverage": 0.9231,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 12,
+    "total_items": 13,
+    "solve_time_ms": 137,
+    "wall_time_ms": 137,
+    "error": null
+  },
+  {
+    "task_id": "hard_diverse_sizes",
+    "constraint_group": "hard_tightfit",
+    "description": "5 size tiers (100mm-800mm), 73 items - bin packing diversity",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.9042,
+    "metrics": {
+      "volume_utilization": 0.8083,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 73,
+    "total_items": 73,
+    "solve_time_ms": 904,
+    "wall_time_ms": 905,
+    "error": null
+  },
+  {
+    "task_id": "hard_low_ceiling",
+    "constraint_group": "hard_tightfit",
+    "description": "Low ceiling 220mm - single layer, every mm counts",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.5,
+        "actual": 0.75,
+        "pass": true
+      }
+    ],
+    "final_score": 0.8597,
+    "metrics": {
+      "volume_utilization": 0.8693,
+      "item_coverage": 0.75,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 18,
+    "total_items": 24,
+    "solve_time_ms": 203,
+    "wall_time_ms": 204,
+    "error": null
+  },
+  {
+    "task_id": "hard_near_full",
+    "constraint_group": "hard_tightfit",
+    "description": "6 floor + 5 ceiling tiles + 4 odd (350x350) fillers - near full",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.46,
+        "actual": 0.5333,
+        "pass": true
+      }
+    ],
+    "final_score": 0.86,
+    "metrics": {
+      "volume_utilization": 1.0,
+      "item_coverage": 0.5333,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 8,
+    "total_items": 15,
+    "solve_time_ms": 93,
+    "wall_time_ms": 93,
+    "error": null
+  },
+  {
+    "task_id": "hard_chaos_retail",
+    "constraint_group": "hard_chaos",
+    "description": "Retail nightmare: 5 SKU, all constraints, 800kg limit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.4,
+        "actual": 0.8154,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.5,
+        "actual": 0.9,
+        "pass": true
+      }
+    ],
+    "final_score": 0.6586,
+    "metrics": {
+      "volume_utilization": 0.448,
+      "item_coverage": 0.8154,
+      "fragility_score": 0.9,
+      "time_score": 1.0
+    },
+    "placed": 53,
+    "total_items": 65,
+    "solve_time_ms": 663,
+    "wall_time_ms": 664,
+    "error": null
+  },
+  {
+    "task_id": "hard_chaos_heavy_fragile",
+    "constraint_group": "hard_chaos",
+    "description": "Heavy fragile eggs (22kg, upright) + support + medium, 500kg limit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.45,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.5,
+        "actual": 0.8,
+        "pass": true
+      }
+    ],
+    "final_score": 0.8224,
+    "metrics": {
+      "volume_utilization": 0.6847,
+      "item_coverage": 1.0,
+      "fragility_score": 0.8,
+      "time_score": 1.0
+    },
+    "placed": 22,
+    "total_items": 22,
+    "solve_time_ms": 228,
+    "wall_time_ms": 229,
+    "error": null
+  },
+  {
+    "task_id": "hard_chaos_all_nostack",
+    "constraint_group": "hard_chaos",
+    "description": "All non-stackable: only one layer, 1800mm height wasted",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.55,
+        "actual": 0.8889,
+        "pass": true
+      }
+    ],
+    "final_score": 0.5321,
+    "metrics": {
+      "volume_utilization": 0.1308,
+      "item_coverage": 0.8889,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 16,
+    "total_items": 18,
+    "solve_time_ms": 300,
+    "wall_time_ms": 300,
+    "error": null
+  },
+  {
+    "task_id": "hard_chaos_squeeze",
+    "constraint_group": "hard_chaos",
+    "description": "Low ceiling(500mm) + 150kg limit + upright(400mm) + fragile",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.33,
+        "actual": 1.0,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.6,
+        "actual": 1.0,
+        "pass": true
+      }
+    ],
+    "final_score": 0.8583,
+    "metrics": {
+      "volume_utilization": 0.7167,
+      "item_coverage": 1.0,
+      "fragility_score": 1.0,
+      "time_score": 1.0
+    },
+    "placed": 24,
+    "total_items": 24,
+    "solve_time_ms": 454,
+    "wall_time_ms": 454,
+    "error": null
+  },
+  {
+    "task_id": "hard_chaos_maximum",
+    "constraint_group": "hard_chaos",
+    "description": "FINAL BOSS: 8 SKU, all archetypes, all constraints, 600kg limit",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "check": "valid",
+        "expected": true,
+        "actual": true,
+        "pass": true
+      },
+      {
+        "check": "min_coverage",
+        "expected": 0.3,
+        "actual": 0.9012,
+        "pass": true
+      },
+      {
+        "check": "min_fragility",
+        "expected": 0.4,
+        "actual": 0.8,
+        "pass": true
+      }
+    ],
+    "final_score": 0.7035,
+    "metrics": {
+      "volume_utilization": 0.5063,
+      "item_coverage": 0.9012,
+      "fragility_score": 0.8,
+      "time_score": 1.0
+    },
+    "placed": 73,
+    "total_items": 81,
+    "solve_time_ms": 924,
+    "wall_time_ms": 924,
+    "error": null
+  }
+]

@@ -156,6 +156,7 @@ def solve_request(
     t0 = time.perf_counter()
     proxy_upper_bound = _proxy_upper_bound(request)
     repeat_heavy = fingerprint.total_items >= 60 and fingerprint.sku_count <= 4
+    prefer_safe_fragility = _should_use_conservative_fragility_selection(fingerprint)
 
     seed_limit_ms = min(220, max(120, time_budget_ms // 4))
     order_budget_ms = max(80, min(260, time_budget_ms // 4))
@@ -233,7 +234,15 @@ def solve_request(
                     runs.append(strict_improved)
 
     enable_repair = fingerprint.total_items <= 120 and not repeat_heavy
-    best_two = sorted(runs, key=_run_sort_key, reverse=True)[:2]
+    best_two = sorted(
+        runs,
+        key=lambda candidate: _top_level_run_sort_key(
+            candidate,
+            request,
+            prefer_safe_fragility=prefer_safe_fragility,
+        ),
+        reverse=True,
+    )[:2]
     if best_two and enable_repair:
         per_run_repair_ms = max(35, repair_budget_ms // len(best_two))
         for candidate in best_two:
@@ -253,7 +262,14 @@ def solve_request(
             if _run_sort_key(repaired) > _run_sort_key(candidate):
                 runs.append(repaired)
 
-    best = _select_best_run(runs)
+    best = max(
+        runs,
+        key=lambda candidate: _top_level_run_sort_key(
+            candidate,
+            request,
+            prefer_safe_fragility=prefer_safe_fragility,
+        ),
+    )
     placements, leftover, final_state = _finalize_run(
         request=request,
         run=best,
@@ -1759,6 +1775,61 @@ def _select_best_run(runs: Sequence[PolicyRun]) -> PolicyRun:
 
 def _run_sort_key(run: PolicyRun) -> Tuple[float, int]:
     return (run.score, -run.elapsed_ms)
+
+
+def _should_use_conservative_fragility_selection(
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return (
+        fingerprint.sku_count >= 5
+        and fingerprint.volume_ratio <= 1.05
+        and fingerprint.fragile_ratio >= 0.18
+        and fingerprint.upright_ratio >= 0.45
+        and (
+            fingerprint.non_stackable_ratio >= 0.05
+            or fingerprint.weight_ratio >= 0.55
+        )
+    )
+
+
+def _top_level_run_sort_key(
+    run: PolicyRun,
+    request: Dict[str, Any],
+    prefer_safe_fragility: bool,
+) -> Tuple[float, int]:
+    if not prefer_safe_fragility:
+        return _run_sort_key(run)
+
+    pallet = request["pallet"]
+    pallet_volume = (
+        pallet["length_mm"] * pallet["width_mm"] * pallet["max_height_mm"]
+    )
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    placed_volume = sum(
+        placement.aabb.length_x() * placement.aabb.width_y() * placement.aabb.height_z()
+        for placement in run.placements
+    )
+    volume_util = placed_volume / max(pallet_volume, 1)
+    coverage = len(run.placements) / max(total_items, 1)
+    fragility_score = _fragility_score_from_placements(run.placements)
+    conservative_score = run.score + 0.40 * fragility_score
+    return (conservative_score, -run.elapsed_ms)
+
+
+def _fragility_score_from_placements(
+    placements: Sequence[PlacedBox],
+) -> float:
+    violations = 0
+    for top in placements:
+        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        for bottom in placements:
+            if not bottom.fragile:
+                continue
+            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON:
+                if top.aabb.overlap_area_xy(bottom.aabb) > 0:
+                    violations += 1
+    return max(0.0, 1.0 - 0.05 * violations)
 
 
 def _frontier_exposure(candidate: BlockCandidate, state: PalletState) -> float:
