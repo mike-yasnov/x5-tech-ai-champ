@@ -17,16 +17,21 @@ from solver.models import Pallet, Box, solution_to_dict
 from solver.solver import solve
 
 
-SCENARIOS = [
+ORGANIZER_SCENARIOS = [
     ("heavy_water", 42),
     ("fragile_tower", 43),
     ("liquid_tetris", 44),
     ("random_mixed", 45),
+]
+
+PROJECT_SCENARIOS = [
     ("exact_fit", 46),
     ("fragile_mix", 47),
     ("support_tetris", 48),
     ("cavity_fill", 49),
 ]
+
+SCENARIOS = ORGANIZER_SCENARIOS + PROJECT_SCENARIOS
 
 
 def _request_to_models(request_dict: dict):
@@ -101,41 +106,60 @@ def run_benchmark(n_restarts: int | None = None) -> list:
 
 
 def format_markdown(results: list) -> str:
-    lines = []
-    lines.append("## Benchmark Results\n")
-    lines.append(
-        "| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
-    )
-    lines.append(
-        "|----------|-------|--------|----------|-----------|------------|--------|-----------|"
-    )
+    lines = ["## Benchmark Results", ""]
 
-    total_score = 0.0
-    for r in results:
-        m = r.get("metrics", {})
-        if r["valid"]:
-            lines.append(
-                f"| {r['scenario']} "
-                f"| **{r['final_score']:.4f}** "
-                f"| {m.get('volume_utilization', 0):.4f} "
-                f"| {m.get('item_coverage', 0):.4f} "
-                f"| {m.get('fragility_score', 0):.4f} "
-                f"| {m.get('time_score', 0):.4f} "
-                f"| {r['placed']}/{r['total_items']} "
-                f"| {r['solve_time_ms']} |"
-            )
-            total_score += r["final_score"]
-        else:
-            lines.append(
-                f"| {r['scenario']} "
-                f"| **INVALID** "
-                f"| - | - | - | - "
-                f"| {r['placed']}/{r['total_items']} "
-                f"| {r['solve_time_ms']} |"
-            )
+    def render_table(title: str, rows: list) -> list:
+        section = [f"### {title}", ""]
+        section.append(
+            "| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |"
+        )
+        section.append(
+            "|----------|-------|--------|----------|-----------|------------|--------|-----------|"
+        )
 
-    avg = total_score / len(results) if results else 0
-    lines.append(f"\n**Average score: {avg:.4f}**")
+        total_score = 0.0
+        for r in rows:
+            m = r.get("metrics", {})
+            if r["valid"]:
+                section.append(
+                    f"| {r['scenario']} "
+                    f"| **{r['final_score']:.4f}** "
+                    f"| {m.get('volume_utilization', 0):.4f} "
+                    f"| {m.get('item_coverage', 0):.4f} "
+                    f"| {m.get('fragility_score', 0):.4f} "
+                    f"| {m.get('time_score', 0):.4f} "
+                    f"| {r['placed']}/{r['total_items']} "
+                    f"| {r['solve_time_ms']} |"
+                )
+                total_score += r["final_score"]
+            else:
+                section.append(
+                    f"| {r['scenario']} "
+                    f"| **INVALID** "
+                    f"| - | - | - | - "
+                    f"| {r['placed']}/{r['total_items']} "
+                    f"| {r['solve_time_ms']} |"
+                )
+
+        avg = total_score / len(rows) if rows else 0
+        section.append("")
+        section.append(f"**Average score: {avg:.4f}**")
+        section.append("")
+        return section
+
+    organizer_names = {name for name, _ in ORGANIZER_SCENARIOS}
+    organizer_results = [r for r in results if r["scenario"] in organizer_names]
+    project_results = [r for r in results if r["scenario"] not in organizer_names]
+
+    lines.extend(render_table("Сценарии организаторов", organizer_results))
+    lines.extend(render_table("Наши synthetic/diagnostic сценарии", project_results))
+
+    overall_avg = (
+        sum(r["final_score"] for r in results if r["valid"]) / len(results)
+        if results
+        else 0
+    )
+    lines.append(f"**Overall average: {overall_avg:.4f}**")
     return "\n".join(lines)
 
 
