@@ -32,6 +32,48 @@ def _color_for_sku(sku_id: str, index: int) -> str:
     return SKU_COLORS[index % len(SKU_COLORS)]
 
 
+def _calc_overlap_2d(b1: Dict[str, Any], b2: Dict[str, Any]) -> float:
+    """Площадь пересечения проекций на XY (x_min/x_max, y_min/y_max)."""
+    dx = max(0, min(b1["x_max"], b2["x_max"]) - max(b1["x_min"], b2["x_min"]))
+    dy = max(0, min(b1["y_max"], b2["y_max"]) - max(b1["y_min"], b2["y_min"]))
+    return dx * dy
+
+
+def _fragility_violation_bottom_indices(placements: List[Dict[str, Any]]) -> set:
+    """Индексы placement'ов, которые являются нижним (хрупким) объектом в паре с нарушением fragile.
+    Правило: тяжёлая (>2 kg) коробка сверху на хрупкой при пересечении по XY.
+    """
+    n = len(placements)
+    boxes = []
+    for p in placements:
+        boxes.append({
+            "x_min": p["x_mm"],
+            "x_max": p["x_mm"] + p["length_mm"],
+            "y_min": p["y_mm"],
+            "y_max": p["y_mm"] + p["width_mm"],
+            "z_min": p["z_mm"],
+            "z_max": p["z_mm"] + p["height_mm"],
+            "weight_kg": p.get("weight_kg", 0),
+            "fragile": p.get("fragile", False),
+        })
+    bottom_indices = set()
+    for i in range(n):
+        if not boxes[i]["fragile"]:
+            continue
+        for j in range(n):
+            if i == j:
+                continue
+            if boxes[j]["weight_kg"] <= 2.0:
+                continue
+            if abs(boxes[j]["z_min"] - boxes[i]["z_max"]) >= 1e-6:
+                continue
+            if _calc_overlap_2d(boxes[i], boxes[j]) <= 0:
+                continue
+            bottom_indices.add(i)
+            break
+    return bottom_indices
+
+
 def _generate_html(scenario: Dict[str, Any]) -> str:
     """Generate a standalone HTML file with Three.js 3D visualization."""
     pallet = scenario["pallet"]
@@ -46,6 +88,9 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
     sku_ids = sorted(set(p["sku_id"] for p in placements))
     sku_color_map = {sid: _color_for_sku(sid, i) for i, sid in enumerate(sku_ids)}
 
+    # Fragility violations: нижний (хрупкий) объект в паре — выделяем ему верхнюю грань
+    violation_bottom = _fragility_violation_bottom_indices(placements)
+
     # Build JS data
     boxes_js = json.dumps([
         {
@@ -54,8 +99,10 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
             "dx": p["length_mm"], "dy": p["height_mm"], "dz": p["width_mm"],
             "color": sku_color_map[p["sku_id"]],
             "fragile": p.get("fragile", False),
+            "weight_kg": p.get("weight_kg", 0),
+            "fragility_violation_bottom": i in violation_bottom,
         }
-        for p in placements
+        for i, p in enumerate(placements)
     ])
 
     pallet_js = json.dumps({
@@ -226,16 +273,24 @@ BOXES.forEach((box, i) => {{
   line.position.copy(mesh.position);
   scene.add(line);
 
-  // Fragile marker
-  if (box.fragile) {{
+  // Marker: 3D cross for fragility violation (heavy on fragile), sphere for fragile only
+  const cx = (box.x + box.dx / 2) * S;
+  const cyTop = (box.y + box.dy) * S + 0.005;
+  const cz = (box.z + box.dz / 2) * S;
+  const markerMat = new THREE.MeshStandardMaterial({{ color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 0.6 }});
+  if (box.fragility_violation_bottom) {{
+    const r = Math.min(box.dx, box.dz) * S * 0.2;
+    const t = r * 0.2;
+    const cross = new THREE.Group();
+    cross.add(new THREE.Mesh(new THREE.BoxGeometry(r * 2, t, t), markerMat));
+    cross.add(new THREE.Mesh(new THREE.BoxGeometry(t, r * 2, t), markerMat));
+    cross.add(new THREE.Mesh(new THREE.BoxGeometry(t, t, r * 2), markerMat));
+    cross.position.set(cx, cyTop, cz);
+    scene.add(cross);
+  }} else if (box.fragile) {{
     const markerGeo = new THREE.SphereGeometry(Math.min(box.dx, box.dz) * S * 0.15, 8, 8);
-    const markerMat = new THREE.MeshStandardMaterial({{ color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 0.5 }});
     const marker = new THREE.Mesh(markerGeo, markerMat);
-    marker.position.set(
-      (box.x + box.dx / 2) * S,
-      (box.y + box.dy) * S + 0.005,
-      (box.z + box.dz / 2) * S
-    );
+    marker.position.set(cx, cyTop, cz);
     scene.add(marker);
   }}
 
@@ -276,7 +331,7 @@ renderer.domElement.addEventListener('mousemove', (e) => {{
       tooltip.style.display = 'block';
       tooltip.style.left = (e.clientX + 12) + 'px';
       tooltip.style.top = (e.clientY + 12) + 'px';
-      tooltip.innerHTML = `<b>${{b.sku_id}}</b><br>${{b.dx}}x${{b.dz}}x${{b.dy}}mm${{b.fragile ? '<br><span style="color:#ff6666">FRAGILE</span>' : ''}}`;
+      tooltip.innerHTML = `<b>${{b.sku_id}}</b><br>${{b.dx}}×${{b.dz}}×${{b.dy}} mm<br>Weight: ${{b.weight_kg}} kg${{b.fragile ? '<br><span style="color:#ff6666">FRAGILE</span>' : ''}}`;
     }}
   }} else {{
     tooltip.style.display = 'none';
@@ -328,6 +383,7 @@ def generate_viz_data(benchmark_results: List[Dict], requests: List[Dict]) -> Li
                 "width_mm": dim["width_mm"],
                 "height_mm": dim["height_mm"],
                 "fragile": sku.get("fragile", False),
+                "weight_kg": sku.get("weight_kg", 0),
             })
 
         viz_data.append({
