@@ -173,12 +173,15 @@ def pack_greedy(
     placements: List[Placement] = []
     unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
 
+    # Cache orientations per SKU (same SKU = same orientations)
+    orientation_cache: Dict[str, list] = {}
+
     logger.info(
         "[pack_greedy] task=%s sort=%s total_instances=%d",
         task_id, sort_key_name, len(instances),
     )
 
-    check_interval = max(10, len(instances) // 10)  # Check time every ~10% of items
+    check_interval = max(4, len(instances) // 20)  # Check time every ~5% of items
 
     for item_idx, (box, inst_idx) in enumerate(instances):
         # Periodic time check inside packing loop
@@ -186,7 +189,6 @@ def pack_greedy(
             elapsed = (time.perf_counter() - t0) * 1000
             if elapsed > time_limit_ms:
                 logger.debug("[pack_greedy] time limit reached at item %d/%d", item_idx, len(instances))
-                # Mark remaining as unplaced
                 for remaining_box, remaining_idx in instances[item_idx:]:
                     if state.current_weight + remaining_box.weight_kg > pallet.max_weight_kg:
                         reason = "weight_limit_exceeded"
@@ -196,12 +198,14 @@ def pack_greedy(
                     unplaced_counts[remaining_box.sku_id]["reason"] = reason
                 break
 
-        orientations = get_orientations(box)
+        if box.sku_id not in orientation_cache:
+            orientation_cache[box.sku_id] = get_orientations(box)
+        orientations = orientation_cache[box.sku_id]
         best_score = -1.0
         best_placement: Optional[Tuple[int, int, int, int, int, int, str]] = None
 
-        # Try each EP × orientation
-        for ep in list(state.extreme_points):
+        # Try each EP × orientation (no list() copy — EPs not modified during scoring)
+        for ep in state.extreme_points:
             ex, ey, ez = ep
             for dx, dy, dz, rot_code in orientations:
                 if not state.can_place(
@@ -408,15 +412,18 @@ def pack_two_phase(
     state = PalletState(pallet)
     placements: List[Placement] = []
     unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+    orientation_cache: Dict[str, list] = {}
 
     for phase_boxes, phase_name in all_phases:
         instances = _expand_boxes(phase_boxes)
         for box, inst_idx in instances:
-            orientations = get_orientations(box)
+            if box.sku_id not in orientation_cache:
+                orientation_cache[box.sku_id] = get_orientations(box)
+            orientations = orientation_cache[box.sku_id]
             best_score = -1.0
             best_placement = None
 
-            for ep in list(state.extreme_points):
+            for ep in state.extreme_points:
                 ex, ey, ez = ep
                 for dx, dy, dz, rot_code in orientations:
                     if not state.can_place(
@@ -489,13 +496,16 @@ def pack_greedy_with_order(
     state = PalletState(pallet)
     placements: List[Placement] = []
     unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+    orientation_cache: Dict[str, list] = {}
 
     for box, inst_idx in order:
-        orientations = get_orientations(box)
+        if box.sku_id not in orientation_cache:
+            orientation_cache[box.sku_id] = get_orientations(box)
+        orientations = orientation_cache[box.sku_id]
         best_score = -1.0
         best_placement = None
 
-        for ep in list(state.extreme_points):
+        for ep in state.extreme_points:
             ex, ey, ez = ep
             for dx, dy, dz, rot_code in orientations:
                 if not state.can_place(
@@ -571,18 +581,22 @@ def pack_beam_search(
     initial_state = PalletState(pallet)
     beam = [(initial_state, [], 0.0)]
 
+    orientation_cache: Dict[str, list] = {}
+
     for item_idx, (box, inst_idx) in enumerate(instances):
         elapsed = (time.perf_counter() - t0) * 1000
         if elapsed > time_limit_ms * 0.9:
             break
 
-        orientations = get_orientations(box)
+        if box.sku_id not in orientation_cache:
+            orientation_cache[box.sku_id] = get_orientations(box)
+        orientations = orientation_cache[box.sku_id]
         candidates = []
 
         for state, placements, cumulative_score in beam:
             # Try all EPs × orientations for this beam entry
             item_candidates = []
-            for ep in list(state.extreme_points):
+            for ep in state.extreme_points:
                 ex, ey, ez = ep
                 for dx, dy, dz, rot_code in orientations:
                     if not state.can_place(
@@ -688,6 +702,8 @@ def pack_bestfit(
 
     logger.info("[pack_bestfit] task=%s total_instances=%d", task_id, total_items)
 
+    orientation_cache: Dict[str, list] = {}
+
     while remaining:
         best_score = -1.0
         best_idx = -1
@@ -698,8 +714,10 @@ def pack_bestfit(
             if state.current_weight + box.weight_kg > pallet.max_weight_kg + 1e-6:
                 continue
 
-            orientations = get_orientations(box)
-            for ep in list(state.extreme_points):
+            if box.sku_id not in orientation_cache:
+                orientation_cache[box.sku_id] = get_orientations(box)
+            orientations = orientation_cache[box.sku_id]
+            for ep in state.extreme_points:
                 ex, ey, ez = ep
                 for dx, dy, dz, rot_code in orientations:
                     if not state.can_place(

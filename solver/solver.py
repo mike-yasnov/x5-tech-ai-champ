@@ -4,25 +4,73 @@ import logging
 import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections import defaultdict
 from typing import List, Optional, Tuple
 
 from .models import Box, Pallet, Solution, solution_to_dict
 from .packer import SORT_KEYS, pack_greedy, pack_greedy_with_order, pack_two_phase, pack_beam_search, pack_bestfit, MAX_BESTFIT_ITEMS
-from .ml_ranker import MLPScorer
+from .pallet_state import _overlap_area
 
 # Add project root to path for validator import
 sys.path.insert(0, ".")
 
 logger = logging.getLogger(__name__)
 
-# Auto-detect CI: on CI, elapsed time = CI time (factor=1.0)
-# Locally, estimate CI time with slowdown factor
+# Auto-detect CI
 _IS_CI = os.environ.get("CI", "").lower() in ("true", "1", "yes") or os.environ.get("GITHUB_ACTIONS") == "true"
-CI_SLOWDOWN_FACTOR = 1.0 if _IS_CI else 1.0
 
-# Number of parallel workers (CI has 2 cores)
-N_WORKERS = int(os.environ.get("SOLVER_WORKERS", "2"))
+# Parallel only on Linux (CI); macOS fork + short tasks = overhead > benefit
+N_WORKERS = int(os.environ.get("SOLVER_WORKERS", "2" if sys.platform.startswith("linux") else "1"))
+
+
+def _fast_score(pallet: Pallet, boxes: List[Box], solution: Solution) -> float:
+    """Exact proxy score matching validator formula, without full validation overhead.
+
+    Assumes solution is valid (our packers always produce valid placements).
+    """
+    total_requested_items = sum(b.quantity for b in boxes)
+    placements = solution.placements
+    if not placements:
+        return 0.0
+
+    boxes_meta = {b.sku_id: b for b in boxes}
+
+    placed_volume = 0
+    by_top_z = defaultdict(list)
+    for p in placements:
+        vol = p.length_mm * p.width_mm * p.height_mm
+        placed_volume += vol
+        by_top_z[p.z_mm + p.height_mm].append(p)
+
+    # Count fragility violations
+    fragility_violations = 0
+    for top in placements:
+        top_box = boxes_meta[top.sku_id]
+        if top_box.weight_kg <= 2.0 or top.z_mm == 0:
+            continue
+        tx1, ty1 = top.x_mm, top.y_mm
+        tx2, ty2 = tx1 + top.length_mm, ty1 + top.width_mm
+        for bottom in by_top_z.get(top.z_mm, ()):
+            bottom_box = boxes_meta[bottom.sku_id]
+            if not bottom_box.fragile:
+                continue
+            bx1, by1 = bottom.x_mm, bottom.y_mm
+            bx2, by2 = bx1 + bottom.length_mm, by1 + bottom.width_mm
+            if _overlap_area(tx1, ty1, tx2, ty2, bx1, by1, bx2, by2) > 0:
+                fragility_violations += 1
+
+    vol_util = placed_volume / pallet.volume if pallet.volume > 0 else 0.0
+    item_coverage = len(placements) / total_requested_items if total_requested_items > 0 else 0.0
+    fragility_score = max(0.0, 1.0 - 0.05 * fragility_violations)
+    # time_score=1.0 during strategy selection (final time set at the end)
+    time_score = 1.0
+
+    return (
+        0.50 * vol_util
+        + 0.30 * item_coverage
+        + 0.10 * fragility_score
+        + 0.10 * time_score
+    )
 
 
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
@@ -45,11 +93,8 @@ def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
 
 def _run_strategy(args: tuple) -> Tuple[float, Solution, str, str, str, float]:
     """Worker function: run a single packing strategy. Must be top-level for pickling."""
-    task_id, pallet, boxes, key_name, weight_profile, packer_type, request_dict = args
+    task_id, pallet, boxes, key_name, weight_profile, packer_type = args
     import time as _time
-
-    # Ensure validator is importable
-    sys.path.insert(0, ".")
 
     t0 = _time.perf_counter()
     if packer_type == "two_phase":
@@ -63,22 +108,19 @@ def _run_strategy(args: tuple) -> Tuple[float, Solution, str, str, str, float]:
         solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
                                weight_profile=weight_profile)
 
-    score = _evaluate_score(request_dict, solution)
-    if score is None:
-        score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
-
+    proxy_score = _fast_score(pallet, boxes, solution)
     strategy_ms = (_time.perf_counter() - t0) * 1000
-    return score, solution, key_name, weight_profile, packer_type, strategy_ms
+    return proxy_score, solution, key_name, weight_profile, packer_type, strategy_ms
 
 
 def _run_strategies_sequential(
-    task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+    task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
 ) -> Tuple[Optional[Solution], float, str]:
     """Run strategies sequentially with adaptive time stopping."""
     best_solution = None
     best_score = -1.0
     best_key = ""
-    estimated_ci_time_per_strategy = 0.0
+    estimated_time_per_strategy = 0.0
 
     for i in range(n_to_run):
         elapsed = (time.perf_counter() - t0) * 1000
@@ -86,9 +128,9 @@ def _run_strategies_sequential(
             if elapsed > strategy_budget_ms * 0.9:
                 logger.info("[solve] adaptive stop at restart %d (%.0fms)", i, elapsed)
                 break
-            if elapsed + estimated_ci_time_per_strategy > strategy_budget_ms:
+            if elapsed + estimated_time_per_strategy > strategy_budget_ms:
                 logger.info("[solve] adaptive stop: next would push to %.0fms at restart %d",
-                            elapsed + estimated_ci_time_per_strategy, i)
+                            elapsed + estimated_time_per_strategy, i)
                 break
 
         key_name, weight_profile, packer_type = strategies[i]
@@ -105,12 +147,10 @@ def _run_strategies_sequential(
             solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
                                    weight_profile=weight_profile)
 
-        score = _evaluate_score(request_dict, solution)
-        if score is None:
-            score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
+        score = _fast_score(pallet, boxes, solution)
 
         strategy_ms = (time.perf_counter() - strategy_t0) * 1000
-        estimated_ci_time_per_strategy = max(estimated_ci_time_per_strategy, strategy_ms)
+        estimated_time_per_strategy = max(estimated_time_per_strategy, strategy_ms)
 
         logger.info("[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms",
                     i, key_name, weight_profile, packer_type, score, len(solution.placements), strategy_ms)
@@ -124,167 +164,84 @@ def _run_strategies_sequential(
 
 
 def _run_strategies_parallel(
-    task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+    task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
 ) -> Tuple[Optional[Solution], float, str]:
     """Run strategies in parallel using ProcessPoolExecutor."""
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    import multiprocessing
+
     best_solution = None
     best_score = -1.0
     best_key = ""
 
-    # Prepare args for all strategies
+    # Prepare args (no request_dict — workers use proxy score)
     args_list = [
-        (task_id, pallet, boxes, s[0], s[1], s[2], request_dict)
+        (task_id, pallet, boxes, s[0], s[1], s[2])
         for s in strategies[:n_to_run]
     ]
 
-    # Use 'fork' context on Linux (CI) for fast process creation
-    # On macOS, 'fork' can be unsafe with some libraries but works here
-    import multiprocessing
     ctx = multiprocessing.get_context("fork")
 
     with ProcessPoolExecutor(max_workers=N_WORKERS, mp_context=ctx) as pool:
-        futures = {pool.submit(_run_strategy, args): i for i, args in enumerate(args_list)}
+        # Submit in batches of N_WORKERS to control in-flight work
+        pending = {}
+        next_idx = 0
 
+        def _submit_batch():
+            nonlocal next_idx
+            while len(pending) < N_WORKERS and next_idx < len(args_list):
+                f = pool.submit(_run_strategy, args_list[next_idx])
+                pending[f] = next_idx
+                next_idx += 1
+
+        _submit_batch()
         completed = 0
-        for future in as_completed(futures):
-            idx = futures[future]
-            try:
-                score, solution, key_name, weight_profile, packer_type, strategy_ms = future.result()
-            except Exception as e:
-                logger.warning("[solve] strategy %d failed: %s", idx, e)
+
+        while pending:
+            # Wait for next completion
+            done_futures = []
+            for f in list(pending):
+                if f.done():
+                    done_futures.append(f)
+
+            if not done_futures:
+                # Brief wait then re-check
+                time.sleep(0.001)
                 continue
 
-            completed += 1
-            logger.info("[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms",
-                        idx, key_name, weight_profile, packer_type, score, len(solution.placements), strategy_ms)
+            for future in done_futures:
+                idx = pending.pop(future)
+                try:
+                    score, solution, key_name, weight_profile, packer_type, strategy_ms = future.result()
+                except Exception as e:
+                    logger.warning("[solve] strategy %d failed: %s", idx, e)
+                    _submit_batch()
+                    continue
 
-            if score > best_score:
-                best_score = score
-                best_solution = solution
-                best_key = key_name
+                completed += 1
+                logger.info("[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms",
+                            idx, key_name, weight_profile, packer_type, score, len(solution.placements), strategy_ms)
 
-            # Check wall-clock budget — cancel remaining if exceeded
+                if score > best_score:
+                    best_score = score
+                    best_solution = solution
+                    best_key = key_name
+
+            # Check wall-clock budget before submitting more
             elapsed = (time.perf_counter() - t0) * 1000
             if elapsed > strategy_budget_ms:
                 logger.info("[solve] parallel budget reached at %d/%d completed (%.0fms)",
-                            completed, n_to_run, elapsed)
-                for f in futures:
+                            completed, len(args_list), elapsed)
+                for f in pending:
                     f.cancel()
+                pending.clear()
                 break
+
+            _submit_batch()
 
     logger.info("[solve] parallel done: %d strategies completed, best_score=%.4f best_key=%s",
                 completed, best_score, best_key)
     return best_solution, best_score, best_key
-
-
-def _local_order_search(
-    task_id: str,
-    pallet: Pallet,
-    boxes: List[Box],
-    best_solution: Solution,
-    request_dict: dict,
-    time_budget_ms: int = 200,
-    n_swaps: int = 20,
-) -> Tuple[Optional[Solution], Optional[float]]:
-    """Local search: try permutations of item order from the best solution.
-
-    Extracts the placement order from the solution, then tries:
-    1. Swapping adjacent items near the placed/unplaced boundary
-    2. Moving unplaced items earlier in the order
-    3. Random adjacent swaps throughout the order
-
-    Returns (solution, score) or (None, None) if no improvement.
-    """
-    import random as _random
-    t0 = time.perf_counter()
-    rng = _random.Random(42)
-
-    # Extract placement order from solution
-    placed_skus = [p.sku_id for p in best_solution.placements]
-    placed_inst = [p.instance_index for p in best_solution.placements]
-
-    # Build the original sorted order from the best strategy
-    # Use the solution's placement order as the "good" order
-    boxes_meta = {b.sku_id: b for b in boxes}
-
-    # Reconstruct (Box, inst_idx) order from placements + unplaced
-    order: List[Tuple[Box, int]] = []
-    for p in best_solution.placements:
-        order.append((boxes_meta[p.sku_id], p.instance_index))
-
-    # Add unplaced items
-    placed_set = set((p.sku_id, p.instance_index) for p in best_solution.placements)
-    for box in boxes:
-        for i in range(box.quantity):
-            if (box.sku_id, i) not in placed_set:
-                order.append((box, i))
-
-    n_placed = len(best_solution.placements)
-    n_total = len(order)
-
-    if n_total < 2:
-        return None, None
-
-    best_local_score = -1.0
-    best_local_solution = None
-
-    # Determine weight profile to use (try a few)
-    profiles_to_try = ["default", "contact_heavy", "fill_heavy"]
-
-    for attempt in range(n_swaps):
-        elapsed = (time.perf_counter() - t0) * 1000
-        if elapsed > time_budget_ms * 0.9:
-            break
-
-        new_order = list(order)
-
-        if attempt < 3:
-            # Try moving first unplaced item to different positions near boundary
-            if n_placed < n_total:
-                insert_pos = max(0, n_placed - attempt - 1)
-                item = new_order.pop(n_placed)
-                new_order.insert(insert_pos, item)
-        elif attempt < 8:
-            # Swap items near the placed/unplaced boundary
-            boundary = max(1, n_placed - 3)
-            i = rng.randint(boundary, min(n_placed + 2, n_total - 1))
-            j = rng.randint(max(0, boundary - 2), min(i + 3, n_total - 1))
-            if i != j:
-                new_order[i], new_order[j] = new_order[j], new_order[i]
-        else:
-            # Random adjacent swaps
-            i = rng.randint(0, n_total - 2)
-            new_order[i], new_order[i + 1] = new_order[i + 1], new_order[i]
-
-        profile = profiles_to_try[attempt % len(profiles_to_try)]
-        solution = pack_greedy_with_order(task_id, pallet, new_order, weight_profile=profile)
-        score = _evaluate_score(request_dict, solution)
-        if score is None:
-            score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
-
-        if score > best_local_score:
-            best_local_score = score
-            best_local_solution = solution
-            # Update order from the improved solution
-            if len(solution.placements) > n_placed:
-                order_new = []
-                placed_set_new = set()
-                for p in solution.placements:
-                    order_new.append((boxes_meta[p.sku_id], p.instance_index))
-                    placed_set_new.add((p.sku_id, p.instance_index))
-                for box in boxes:
-                    for i in range(box.quantity):
-                        if (box.sku_id, i) not in placed_set_new:
-                            order_new.append((box, i))
-                order = order_new
-                n_placed = len(solution.placements)
-
-    logger.info(
-        "[local_search] tried %d permutations in %.0fms best_score=%.4f",
-        min(attempt + 1, n_swaps), (time.perf_counter() - t0) * 1000, best_local_score,
-    )
-
-    return best_local_solution, best_local_score
 
 
 def solve(
@@ -295,11 +252,7 @@ def solve(
     n_restarts: int = 30,
     time_budget_ms: int = 900,
 ) -> Solution:
-    """Run greedy packer with multiple sort strategies and return the best solution.
-
-    Uses parallel execution with ProcessPoolExecutor (2 workers on CI).
-    Falls back to sequential if parallel fails.
-    """
+    """Run greedy packer with multiple sort strategies and return the best solution."""
     t0 = time.perf_counter()
     best_solution: Optional[Solution] = None
     best_score: float = -1.0
@@ -363,23 +316,23 @@ def solve(
         task_id, n_restarts, time_budget_ms, len(strategies), N_WORKERS,
     )
 
-    # --- Parallel strategy evaluation ---
-    # Wall-clock budget: ~40% strategies, ~60% postprocessing (LNS disabled for speed)
+    # --- Strategy evaluation ---
+    # Wall-clock budget: ~40% strategies, rest for LNS + postprocessing
     strategy_budget_ms = time_budget_ms * 0.40
 
     if N_WORKERS > 1:
         try:
             best_solution, best_score, best_key = _run_strategies_parallel(
-                task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+                task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
             )
         except Exception as e:
             logger.warning("[solve] parallel execution failed, falling back to sequential: %s", e)
             best_solution, best_score, best_key = _run_strategies_sequential(
-                task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+                task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
             )
     else:
         best_solution, best_score, best_key = _run_strategies_sequential(
-            task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+            task_id, pallet, boxes, strategies, n_to_run, strategy_budget_ms, t0,
         )
 
     # Try best-fit for small instances (if time allows)
@@ -388,9 +341,7 @@ def solve(
     if total_items <= MAX_BESTFIT_ITEMS and elapsed_so_far < time_budget_ms * 0.5:
         logger.info("[solve] trying bestfit for %d items", total_items)
         bf_solution = pack_bestfit(task_id, pallet, boxes)
-        bf_score = _evaluate_score(request_dict, bf_solution)
-        if bf_score is None:
-            bf_score = len(bf_solution.placements) / max(1, total_items)
+        bf_score = _fast_score(pallet, boxes, bf_solution)
         logger.info(
             "[solve] bestfit score=%.4f placed=%d",
             bf_score, len(bf_solution.placements),
@@ -414,8 +365,8 @@ def solve(
                 max_iterations=100,
                 time_budget_ms=lns_budget,
             )
-            lns_score = _evaluate_score(request_dict, lns_solution)
-            if lns_score is not None and lns_score > best_score:
+            lns_score = _fast_score(pallet, boxes, lns_solution)
+            if lns_score > best_score:
                 logger.info(
                     "[solve] LNS improved: %.4f -> %.4f placed=%d",
                     best_score, lns_score, len(lns_solution.placements),
@@ -423,7 +374,7 @@ def solve(
                 best_score = lns_score
                 best_solution = lns_solution
                 best_key = f"lns_{best_key}"
-            elif lns_score is not None:
+            else:
                 logger.info("[solve] LNS no improvement: %.4f vs %.4f", lns_score, best_score)
         except Exception as e:
             logger.warning("[solve] LNS failed: %s", e)
@@ -439,8 +390,8 @@ def solve(
                 task_id, pallet, boxes, best_solution,
                 time_budget_ms=pp_budget,
             )
-            pp_score = _evaluate_score(request_dict, pp_solution)
-            if pp_score is not None and pp_score > best_score:
+            pp_score = _fast_score(pallet, boxes, pp_solution)
+            if pp_score > best_score:
                 logger.info(
                     "[solve] postprocess improved: %.4f -> %.4f placed=%d->%d",
                     best_score, pp_score,
@@ -449,7 +400,7 @@ def solve(
                 best_score = pp_score
                 best_solution = pp_solution
                 best_key = f"pp_{best_key}"
-            elif pp_score is not None:
+            else:
                 logger.debug("[solve] postprocess no improvement: %.4f vs %.4f", pp_score, best_score)
         except Exception as e:
             logger.warning("[solve] postprocess failed: %s", e)
@@ -465,7 +416,6 @@ def solve(
     )
 
     if best_solution is None:
-        # Should not happen, but return empty solution as fallback
         from . import __version__
         return Solution(
             task_id=task_id,

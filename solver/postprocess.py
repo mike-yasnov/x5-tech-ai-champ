@@ -522,7 +522,10 @@ def _try_repack_violations(
 
     new_violation_count = len(_find_fragility_violations(repacked, boxes_meta))
     if len(repacked) >= len(placements) and new_violation_count < len(violations):
-        return repacked
+        if _validate_placement_feasibility(pallet, repacked, boxes_meta):
+            return repacked
+        else:
+            logger.info("[repack_violations] result has broken feasibility, reverting")
     return placements
 
 
@@ -608,8 +611,12 @@ def _lift_fragile_to_top(
 
     new_v = len(_find_fragility_violations(result, boxes_meta))
     if new_v < len(violations) and len(result) >= len(placements):
-        logger.info("[lift_fragile] improved %d->%d violations", len(violations), new_v)
-        return result
+        # Verify all placements are still feasible (support, collision)
+        if _validate_placement_feasibility(pallet, result, boxes_meta):
+            logger.info("[lift_fragile] improved %d->%d violations", len(violations), new_v)
+            return result
+        else:
+            logger.info("[lift_fragile] result has broken support, reverting")
 
     return placements
 
@@ -839,11 +846,25 @@ def postprocess_solution(
 
     boxes_meta: Dict[str, Box] = {b.sku_id: b for b in boxes}
 
-    # Step 1: Compact downward (fast)
-    placements = compact_downward(pallet, list(solution.placements), boxes_meta)
+    if not solution.placements:
+        return solution
 
-    # Step 2: Reorder to reduce fragility violations (fast)
-    placements = reorder_fragile(pallet, placements, boxes_meta)
+    # Quick check: if nothing to improve, skip entirely
+    has_unplaced = any(u.quantity_unplaced > 0 for u in solution.unplaced)
+    has_violations = bool(_find_fragility_violations(list(solution.placements), boxes_meta))
+
+    if not has_unplaced and not has_violations:
+        logger.info("[postprocess] nothing to improve (no unplaced, no violations)")
+        return solution
+
+    # Step 1: Compact downward (only useful if we'll try inserting more items)
+    placements = list(solution.placements)
+    if has_unplaced:
+        placements = compact_downward(pallet, placements, boxes_meta)
+
+    # Step 2: Reorder to reduce fragility violations (only if violations exist)
+    if has_violations:
+        placements = reorder_fragile(pallet, placements, boxes_meta)
 
     # Step 3: Try insert unplaced items (gets most of the budget)
     elapsed = (_time.perf_counter() - t0) * 1000
@@ -868,9 +889,14 @@ def postprocess_solution(
                     reason="no_space",
                 ))
 
-    # Step 5: Compact again after insertions (fast)
+    # Step 5: Compact again after insertions (only if safe)
     if len(placements) > len(solution.placements):
-        placements = compact_downward(pallet, placements, boxes_meta)
+        compacted = compact_downward(pallet, placements, boxes_meta)
+        # Verify compaction didn't break support
+        if _validate_placement_feasibility(pallet, compacted, boxes_meta):
+            placements = compacted
+        else:
+            logger.info("[postprocess] compact after insert broke feasibility, reverting")
 
     return Solution(
         task_id=task_id,
