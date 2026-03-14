@@ -13,7 +13,7 @@
           "time_score": 1.0
         },
         "placed": 107,
-        "time_ms": 153,
+        "time_ms": 122,
         "error": null
       },
       {
@@ -27,7 +27,21 @@
           "time_score": 1.0
         },
         "placed": 107,
-        "time_ms": 168,
+        "time_ms": 123,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.7329,
+        "metrics": {
+          "volume_utilization": 0.7171,
+          "item_coverage": 0.581,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 104,
+        "time_ms": 147,
         "error": null
       },
       {
@@ -41,21 +55,7 @@
           "time_score": 1.0
         },
         "placed": 104,
-        "time_ms": 175,
-        "error": null
-      },
-      {
-        "strategy": "volume_desc",
-        "valid": true,
-        "final_score": 0.7329,
-        "metrics": {
-          "volume_utilization": 0.7171,
-          "item_coverage": 0.581,
-          "fragility_score": 1.0,
-          "time_score": 1.0
-        },
-        "placed": 104,
-        "time_ms": 190,
+        "time_ms": 148,
         "error": null
       },
       {
@@ -69,7 +69,7 @@
           "time_score": 1.0
         },
         "placed": 104,
-        "time_ms": 195,
+        "time_ms": 150,
         "error": null
       },
       {
@@ -83,7 +83,7 @@
           "time_score": 1.0
         },
         "placed": 104,
-        "time_ms": 211,
+        "time_ms": 151,
         "error": null
       }
     ]
@@ -92,7 +92,7 @@
     "scenario": "fragile_tower",
     "results": [
       {
-        "strategy": "volume_desc",
+        "strategy": "base_area_desc",
         "valid": true,
         "final_score": 0.6214,
         "metrics": {
@@ -102,11 +102,11 @@
           "time_score": 1.0
         },
         "placed": 15,
-        "time_ms": 1,
+        "time_ms": 0,
         "error": null
       },
       {
-        "strategy": "base_area_desc",
+        "strategy": "volume_desc",
         "valid": true,
         "final_score": 0.6214,
         "metrics": {
@@ -145,6 +145,20 @@
         },
         "placed": 18,
         "time_ms": 2,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.5665,
+        "metrics": {
+          "volume_utilization": 0.5611,
+          "item_coverage": 0.3864,
+          "fragility_score": 0.7,
+          "time_score": 1.0
+        },
+        "placed": 17,
+        "time_ms": 3,
         "error": null
       },
       {
@@ -159,20 +173,6 @@
         },
         "placed": 17,
         "time_ms": 3,
-        "error": null
-      },
-      {
-        "strategy": "weight_desc",
-        "valid": true,
-        "final_score": 0.5665,
-        "metrics": {
-          "volume_utilization": 0.5611,
-          "item_coverage": 0.3864,
-          "fragility_score": 0.7,
-          "time_score": 1.0
-        },
-        "placed": 17,
-        "time_ms": 4,
         "error": null
       }
     ]
@@ -191,21 +191,7 @@
           "time_score": 1.0
         },
         "placed": 84,
-        "time_ms": 71,
-        "error": null
-      },
-      {
-        "strategy": "coverage_tie",
-        "valid": true,
-        "final_score": 0.6196,
-        "metrics": {
-          "volume_utilization": 0.3992,
-          "item_coverage": 1.0,
-          "fragility_score": 0.2,
-          "time_score": 1.0
-        },
-        "placed": 84,
-        "time_ms": 74,
+        "time_ms": 57,
         "error": null
       },
       {
@@ -219,11 +205,11 @@
           "time_score": 1.0
         },
         "placed": 84,
-        "time_ms": 87,
+        "time_ms": 62,
         "error": null
       },
       {
-        "strategy": "constrained_first",
+        "strategy": "coverage_tie",
         "valid": true,
         "final_score": 0.6196,
         "metrics": {
@@ -233,7 +219,7 @@
           "time_score": 1.0
         },
         "placed": 84,
-        "time_ms": 133,
+        "time_ms": 64,
         "error": null
       },
       {
@@ -247,7 +233,7 @@
           "time_score": 1.0
         },
         "placed": 84,
-        "time_ms": 150,
+        "time_ms": 104,
         "error": null
       },
       {
@@ -261,7 +247,21 @@
           "time_score": 1.0
         },
         "placed": 84,
-        "time_ms": 179,
+        "time_ms": 106,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.6196,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 106,
         "error": null
       }
     ]
@@ -280,7 +280,7 @@
           "time_score": 1.0
         },
         "placed": 49,
-        "time_ms": 16,
+        "time_ms": 14,
         "error": null
       },
       {
@@ -294,7 +294,7 @@
           "time_score": 1.0
         },
         "placed": 46,
-        "time_ms": 17,
+        "time_ms": 14,
         "error": null
       },
       {
@@ -308,7 +308,7 @@
           "time_score": 1.0
         },
         "placed": 60,
-        "time_ms": 32,
+        "time_ms": 21,
         "error": null
       },
       {
@@ -322,7 +322,7 @@
           "time_score": 1.0
         },
         "placed": 51,
-        "time_ms": 19,
+        "time_ms": 17,
         "error": null
       },
       {
@@ -336,7 +336,7 @@
           "time_score": 1.0
         },
         "placed": 67,
-        "time_ms": 196,
+        "time_ms": 100,
         "error": null
       },
       {
@@ -350,7 +350,7 @@
           "time_score": 1.0
         },
         "placed": 64,
-        "time_ms": 128,
+        "time_ms": 94,
         "error": null
       }
     ]
@@ -369,7 +369,7 @@
           "time_score": 1.0
         },
         "placed": 95,
-        "time_ms": 136,
+        "time_ms": 112,
         "error": null
       },
       {
@@ -383,7 +383,7 @@
           "time_score": 1.0
         },
         "placed": 92,
-        "time_ms": 191,
+        "time_ms": 113,
         "error": null
       },
       {
@@ -397,21 +397,7 @@
           "time_score": 1.0
         },
         "placed": 77,
-        "time_ms": 108,
-        "error": null
-      },
-      {
-        "strategy": "base_area_desc",
-        "valid": true,
-        "final_score": 0.6536,
-        "metrics": {
-          "volume_utilization": 0.6293,
-          "item_coverage": 0.4632,
-          "fragility_score": 1.0,
-          "time_score": 1.0
-        },
-        "placed": 63,
-        "time_ms": 91,
+        "time_ms": 72,
         "error": null
       },
       {
@@ -425,7 +411,7 @@
           "time_score": 1.0
         },
         "placed": 63,
-        "time_ms": 98,
+        "time_ms": 80,
         "error": null
       },
       {
@@ -439,7 +425,21 @@
           "time_score": 1.0
         },
         "placed": 63,
-        "time_ms": 113,
+        "time_ms": 80,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.6536,
+        "metrics": {
+          "volume_utilization": 0.6293,
+          "item_coverage": 0.4632,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 63,
+        "time_ms": 81,
         "error": null
       }
     ]
@@ -458,7 +458,7 @@
           "time_score": 1.0
         },
         "placed": 62,
-        "time_ms": 12,
+        "time_ms": 10,
         "error": null
       },
       {
@@ -472,21 +472,7 @@
           "time_score": 1.0
         },
         "placed": 54,
-        "time_ms": 16,
-        "error": null
-      },
-      {
-        "strategy": "weight_desc",
-        "valid": true,
-        "final_score": 0.6059,
-        "metrics": {
-          "volume_utilization": 0.4975,
-          "item_coverage": 0.8406,
-          "fragility_score": 0.05,
-          "time_score": 1.0
-        },
-        "placed": 58,
-        "time_ms": 37,
+        "time_ms": 9,
         "error": null
       },
       {
@@ -500,21 +486,21 @@
           "time_score": 1.0
         },
         "placed": 58,
-        "time_ms": 47,
+        "time_ms": 29,
         "error": null
       },
       {
-        "strategy": "density_desc",
+        "strategy": "weight_desc",
         "valid": true,
-        "final_score": 0.6009,
+        "final_score": 0.6059,
         "metrics": {
           "volume_utilization": 0.4975,
           "item_coverage": 0.8406,
-          "fragility_score": 0.0,
+          "fragility_score": 0.05,
           "time_score": 1.0
         },
         "placed": 58,
-        "time_ms": 42,
+        "time_ms": 30,
         "error": null
       },
       {
@@ -528,7 +514,21 @@
           "time_score": 1.0
         },
         "placed": 58,
-        "time_ms": 85,
+        "time_ms": 36,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.6009,
+        "metrics": {
+          "volume_utilization": 0.4975,
+          "item_coverage": 0.8406,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 58,
+        "time_ms": 37,
         "error": null
       }
     ]
@@ -536,6 +536,20 @@
   {
     "scenario": "mixed_column_repeat",
     "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.8838,
+        "metrics": {
+          "volume_utilization": 0.7909,
+          "item_coverage": 0.961,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 74,
+        "time_ms": 23,
+        "error": null
+      },
       {
         "strategy": "weight_desc",
         "valid": true,
@@ -547,7 +561,7 @@
           "time_score": 1.0
         },
         "placed": 74,
-        "time_ms": 27,
+        "time_ms": 24,
         "error": null
       },
       {
@@ -561,21 +575,7 @@
           "time_score": 1.0
         },
         "placed": 74,
-        "time_ms": 27,
-        "error": null
-      },
-      {
-        "strategy": "volume_desc",
-        "valid": true,
-        "final_score": 0.8838,
-        "metrics": {
-          "volume_utilization": 0.7909,
-          "item_coverage": 0.961,
-          "fragility_score": 1.0,
-          "time_score": 1.0
-        },
-        "placed": 74,
-        "time_ms": 45,
+        "time_ms": 24,
         "error": null
       },
       {
@@ -589,7 +589,7 @@
           "time_score": 1.0
         },
         "placed": 74,
-        "time_ms": 24,
+        "time_ms": 21,
         "error": null
       },
       {
@@ -603,7 +603,7 @@
           "time_score": 1.0
         },
         "placed": 68,
-        "time_ms": 34,
+        "time_ms": 30,
         "error": null
       },
       {
@@ -617,7 +617,7 @@
           "time_score": 1.0
         },
         "placed": 68,
-        "time_ms": 41,
+        "time_ms": 30,
         "error": null
       }
     ]
@@ -625,6 +625,20 @@
   {
     "scenario": "small_gap_fill",
     "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 3,
+        "error": null
+      },
       {
         "strategy": "weight_desc",
         "valid": true,
@@ -654,20 +668,6 @@
         "error": null
       },
       {
-        "strategy": "volume_desc",
-        "valid": true,
-        "final_score": 0.7917,
-        "metrics": {
-          "volume_utilization": 0.5833,
-          "item_coverage": 1.0,
-          "fragility_score": 1.0,
-          "time_score": 1.0
-        },
-        "placed": 22,
-        "time_ms": 4,
-        "error": null
-      },
-      {
         "strategy": "density_desc",
         "valid": true,
         "final_score": 0.7917,
@@ -678,7 +678,7 @@
           "time_score": 1.0
         },
         "placed": 22,
-        "time_ms": 4,
+        "time_ms": 3,
         "error": null
       },
       {
@@ -692,7 +692,7 @@
           "time_score": 1.0
         },
         "placed": 22,
-        "time_ms": 4,
+        "time_ms": 3,
         "error": null
       },
       {
@@ -781,7 +781,7 @@
           "time_score": 1.0
         },
         "placed": 18,
-        "time_ms": 4,
+        "time_ms": 3,
         "error": null
       },
       {
@@ -795,7 +795,7 @@
           "time_score": 1.0
         },
         "placed": 14,
-        "time_ms": 1,
+        "time_ms": 0,
         "error": null
       }
     ]
@@ -903,7 +903,7 @@
           "time_score": 1.0
         },
         "placed": 21,
-        "time_ms": 4,
+        "time_ms": 3,
         "error": null
       },
       {

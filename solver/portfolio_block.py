@@ -169,14 +169,19 @@ def solve_request(
     proxy_upper_bound = _proxy_upper_bound(request)
     repeat_heavy = fingerprint.total_items >= 60 and fingerprint.sku_count <= 4
     prefer_safe_fragility = _should_use_conservative_fragility_selection(fingerprint)
+    fast_overload_path = _should_use_fast_overload_path(fingerprint)
 
     seed_limit_ms = min(220, max(120, time_budget_ms // 4))
     order_budget_ms = max(80, min(260, time_budget_ms // 4))
     repair_budget_ms = max(80, min(160, time_budget_ms // 6))
+    if fast_overload_path:
+        seed_limit_ms = min(seed_limit_ms, 170)
+        order_budget_ms = min(order_budget_ms, 110)
+        repair_budget_ms = 0
 
     ranked_families = _rank_seed_families(fingerprint, selector)
     runs: List[PolicyRun] = []
-    seed_eval_count = 2 if repeat_heavy else 3
+    seed_eval_count = 2 if (repeat_heavy or fast_overload_path) else 3
 
     for seed_family in ranked_families[:seed_eval_count]:
         elapsed_so_far = int((time.perf_counter() - t0) * 1000)
@@ -245,7 +250,11 @@ def solve_request(
                 if _run_sort_key(strict_improved) > _run_sort_key(order_search_base):
                     runs.append(strict_improved)
 
-    enable_repair = fingerprint.total_items <= 120 and not repeat_heavy
+    enable_repair = (
+        fingerprint.total_items <= 120
+        and not repeat_heavy
+        and not fast_overload_path
+    )
     best_two = sorted(
         runs,
         key=lambda candidate: _top_level_run_sort_key(
@@ -875,6 +884,12 @@ def _local_order_search(
         return run
 
     total_items = sum(box["quantity"] for box in request["boxes"])
+    sku_count = len(request["boxes"])
+    fast_overload_path = (
+        total_items >= 90
+        and sku_count >= 6
+        and run.seed_family in GREEDY_SEED_FAMILIES
+    )
     deadline = time.perf_counter() + budget_ms / 1000.0
     best_run = run
     best_raw_run = run
@@ -925,7 +940,11 @@ def _local_order_search(
     if exact_search:
         shortlist_k = len(raw_runs)
     else:
-        shortlist_k = 1 if total_items >= 60 and len(current_order) <= 4 else 3
+        shortlist_k = (
+            1
+            if total_items >= 60 and (len(current_order) <= 4 or fast_overload_path)
+            else 3
+        )
     best_run = run
     for candidate in raw_runs[:shortlist_k]:
         if time.perf_counter() >= deadline:
@@ -2088,6 +2107,17 @@ def _should_use_conservative_fragility_selection(
             fingerprint.non_stackable_ratio >= 0.05
             or fingerprint.weight_ratio >= 0.55
         )
+    )
+
+
+def _should_use_fast_overload_path(
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return (
+        fingerprint.total_items >= 90
+        and fingerprint.sku_count >= 6
+        and fingerprint.volume_ratio >= 1.30
+        and fingerprint.max_sku_share <= 0.40
     )
 
 

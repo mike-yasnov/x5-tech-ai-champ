@@ -15,6 +15,7 @@ from solver.portfolio_block import (
     _generate_exact_orderings,
     _fragile_staged_instances,
     _materialize_block_candidate,
+    _should_use_fast_overload_path,
     _should_try_strict_fragility_search,
     PolicyRun,
 )
@@ -330,6 +331,16 @@ def test_strict_fragility_search_gates_on_near_fit_heavy_fragile_requests():
         ordered_skus=tuple(box["sku_id"] for box in tower_request["boxes"]),
     )
     assert _should_try_strict_fragility_search(tower_request, tower_fp, tower_run) is False
+
+
+def test_fast_overload_path_targets_large_overloaded_high_sku_requests():
+    overloaded_request = generate_scenario("test_overloaded", "random_mixed", seed=45)
+    overloaded_fp = compute_request_fingerprint(overloaded_request)
+    assert _should_use_fast_overload_path(overloaded_fp) is True
+
+    near_fit_request = generate_scenario("test_near_fit", "fragile_cap_mix", seed=48)
+    near_fit_fp = compute_request_fingerprint(near_fit_request)
+    assert _should_use_fast_overload_path(near_fit_fp) is False
 
 
 def test_fragility_conflict_clusters_capture_entire_xy_column():
