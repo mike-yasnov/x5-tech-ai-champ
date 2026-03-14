@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 import random
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 
 from .models import Box
 
@@ -90,34 +90,6 @@ def _sort_smalls_last(box: Box) -> tuple:
     return (-box.volume, -mn, -box.weight_kg)
 
 
-def _sort_stability_phased(box: Box) -> tuple:
-    if box.fragile:
-        phase = 3
-    elif not box.stackable:
-        phase = 2
-    elif box.strict_upright:
-        phase = 1
-    else:
-        phase = 0
-    return (phase, -box.base_area, -box.weight_kg, -box.volume)
-
-
-def _sort_support_surface_desc(box: Box) -> tuple:
-    support_value = (
-        1 if box.stackable else 0,
-        box.base_area,
-        box.weight_kg,
-        box.volume,
-    )
-    return (
-        -support_value[0],
-        -support_value[1],
-        -support_value[2],
-        -support_value[3],
-        box.fragile,
-    )
-
-
 SORT_KEYS: Dict[str, SortKey] = {
     "volume_desc": _sort_volume_desc,
     "weight_desc": _sort_weight_desc,
@@ -134,8 +106,6 @@ SORT_KEYS: Dict[str, SortKey] = {
     "slenderness_desc": _sort_slenderness_desc,
     "weighted_volume": _sort_weighted_volume,
     "smalls_last": _sort_smalls_last,
-    "stability_phased": _sort_stability_phased,
-    "support_surface_desc": _sort_support_surface_desc,
 }
 
 
@@ -166,20 +136,9 @@ def perturb_boxes(boxes: List[Box], noise_factor: float) -> List[Box]:
         return items
     swaps = max(1, int(len(items) * noise_factor))
     for _ in range(swaps):
-        move_type = random.random()
-        if move_type < 0.45:
-            i = random.randint(0, len(items) - 2)
-            j = min(len(items) - 1, i + random.randint(1, min(5, len(items) - i - 1)))
-            items[i], items[j] = items[j], items[i]
-        elif move_type < 0.75:
-            i, j = random.sample(range(len(items)), 2)
-            items[i], items[j] = items[j], items[i]
-        else:
-            start = random.randint(0, len(items) - 2)
-            window = min(len(items) - start, random.randint(2, min(6, len(items))))
-            chunk = items[start : start + window]
-            random.shuffle(chunk)
-            items[start : start + window] = chunk
+        i = random.randint(0, len(items) - 2)
+        j = min(len(items) - 1, i + random.randint(1, min(5, len(items) - i - 1)))
+        items[i], items[j] = items[j], items[i]
     return items
 
 
@@ -187,15 +146,12 @@ STRATEGY_CONFIGS: List[StrategyConfig] = [
     StrategyConfig("volume__balanced", "volume_desc", "balanced"),
     StrategyConfig("volume__dbfl", "volume_desc", "dbfl"),
     StrategyConfig("volume__max_contact", "volume_desc", "max_contact"),
-    StrategyConfig("volume__fragile_safe", "volume_desc", "fragile_safe"),
     StrategyConfig("area__balanced", "base_area_desc", "balanced"),
     StrategyConfig("area__max_support", "base_area_desc", "max_support"),
     StrategyConfig("area__max_contact", "base_area_desc", "max_contact"),
-    StrategyConfig("area__fragile_safe", "base_area_desc", "fragile_safe"),
     StrategyConfig("weight__balanced", "weight_desc", "balanced"),
     StrategyConfig("weight__center_stable", "weight_desc", "center_stable"),
     StrategyConfig("weight__fragile_last", "fragile_last", "center_stable"),
-    StrategyConfig("weight__fragile_safe", "fragile_last", "fragile_safe"),
     StrategyConfig("density__center_stable", "density_desc", "center_stable"),
     StrategyConfig("density__max_contact", "density_desc", "max_contact"),
     StrategyConfig("constrained__max_support", "constrained_first", "max_support"),
@@ -205,25 +161,13 @@ STRATEGY_CONFIGS: List[StrategyConfig] = [
     StrategyConfig("stackable__max_support", "stackable_first", "max_support"),
     StrategyConfig("layer__min_height", "layer_height_desc", "min_height"),
     StrategyConfig("layer__max_support", "layer_height_desc", "max_support"),
-    StrategyConfig("layer__fragile_safe", "layer_height_desc", "fragile_safe"),
     StrategyConfig("homogeneous__dbfl", "homogeneous", "dbfl"),
     StrategyConfig("homogeneous__max_support", "homogeneous", "max_support"),
-    StrategyConfig("homogeneous__fragile_safe", "homogeneous", "fragile_safe"),
     StrategyConfig("upright__max_support", "upright_first", "max_support"),
     StrategyConfig("slender__min_height", "slenderness_desc", "min_height"),
     StrategyConfig("slender__max_support", "slenderness_desc", "max_support"),
     StrategyConfig("weighted_volume__center", "weighted_volume", "center_stable"),
     StrategyConfig("smalls_last__max_contact", "smalls_last", "max_contact"),
-    StrategyConfig(
-        "stability_phased__fragile_safe", "stability_phased", "fragile_safe"
-    ),
-    StrategyConfig("stability_phased__max_support", "stability_phased", "max_support"),
-    StrategyConfig(
-        "support_surface__max_support", "support_surface_desc", "max_support"
-    ),
-    StrategyConfig(
-        "support_surface__fragile_safe", "support_surface_desc", "fragile_safe"
-    ),
 ]
 
 STRATEGY_CONFIGS.extend(
@@ -236,111 +180,3 @@ STRATEGY_CONFIGS.extend(
     )
     for sort_key_name in SORT_KEYS
 )
-
-
-def summarize_request(
-    boxes: List[Box], pallet_volume: int, pallet_max_weight: float
-) -> Dict[str, float]:
-    total_items = sum(box.quantity for box in boxes)
-    total_volume = sum(box.volume * box.quantity for box in boxes)
-    total_weight = sum(box.weight_kg * box.quantity for box in boxes)
-    fragile_items = sum(box.quantity for box in boxes if box.fragile)
-    upright_items = sum(box.quantity for box in boxes if box.strict_upright)
-    non_stackable_items = sum(box.quantity for box in boxes if not box.stackable)
-    repeated_skus = sum(1 for box in boxes if box.quantity >= 4)
-
-    return {
-        "total_items": total_items,
-        "sku_count": len(boxes),
-        "fill_ratio": total_volume / max(1, pallet_volume),
-        "weight_ratio": total_weight / max(1.0, pallet_max_weight),
-        "fragile_ratio": fragile_items / max(1, total_items),
-        "upright_ratio": upright_items / max(1, total_items),
-        "non_stackable_ratio": non_stackable_items / max(1, total_items),
-        "repeated_sku_ratio": repeated_skus / max(1, len(boxes)),
-    }
-
-
-def select_strategy_configs(
-    boxes: List[Box], pallet_volume: int, pallet_max_weight: float
-) -> List[StrategyConfig]:
-    summary = summarize_request(boxes, pallet_volume, pallet_max_weight)
-    by_name = {config.name: config for config in STRATEGY_CONFIGS}
-
-    selected_names = [
-        "volume__balanced",
-        "area__max_support",
-        "weighted_volume__center",
-        "weight__fragile_last",
-    ]
-
-    if summary["fragile_ratio"] >= 0.20:
-        selected_names.extend(
-            [
-                "weight__fragile_last",
-                "stackable__max_support",
-                "area__max_support",
-                "area__fragile_safe",
-                "weight__fragile_safe",
-                "stability_phased__fragile_safe",
-            ]
-        )
-
-    if summary["upright_ratio"] >= 0.25:
-        selected_names.extend(
-            [
-                "upright__max_support",
-                "constrained__max_support",
-                "layer__min_height",
-            ]
-        )
-
-    if summary["fill_ratio"] >= 0.75:
-        selected_names.extend(
-            [
-                "area__max_contact",
-                "layer__max_support",
-                "smalls_last__max_contact",
-            ]
-        )
-
-    if summary["weight_ratio"] >= 0.55:
-        selected_names.extend(
-            [
-                "weight__center_stable",
-                "density__center_stable",
-                "weighted_volume__center",
-                "support_surface__max_support",
-            ]
-        )
-
-    if summary["repeated_sku_ratio"] >= 0.35:
-        selected_names.extend(
-            [
-                "homogeneous__dbfl",
-                "homogeneous__max_support",
-                "support_surface__fragile_safe",
-            ]
-        )
-
-    if summary["sku_count"] >= 5:
-        selected_names.extend(
-            [
-                "volume__max_contact",
-                "perimeter__max_contact",
-                "slender__min_height",
-                "homogeneous__fragile_safe",
-                "stability_phased__max_support",
-            ]
-        )
-
-    # dedupe while keeping order
-    deduped: List[StrategyConfig] = []
-    seen = set()
-    for name in selected_names:
-        if name in by_name and name not in seen:
-            deduped.append(by_name[name])
-            seen.add(name)
-
-    # keep catalog available, but solver should stay fast by default
-    return deduped[:8]

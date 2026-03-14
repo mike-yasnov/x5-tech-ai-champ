@@ -87,8 +87,7 @@ def run_benchmark(n_restarts: int | None = None, time_budget_ms: int = 5000) -> 
 
         response_dict = solution_to_dict(solution)
         eval_result = evaluate_solution(request_dict, response_dict)
-
-        total_items = sum(b["quantity"] for b in request_dict["boxes"])
+        total_items = sum(box["quantity"] for box in request_dict["boxes"])
 
         entry = {
             "scenario": scenario_type,
@@ -164,41 +163,41 @@ def format_markdown(results: list) -> str:
         if results
         else 0
     )
-    lines.append(f"**Overall average: {overall_avg:.4f}**")
+    lines.append(f"**Overall average: {overall_average:.4f}**")
 
-    # Constraint compliance table
     lines.append("")
     lines.append("### Constraint Compliance")
     lines.append("")
-    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
-    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
-    for r in results:
-        cc = r.get("constraint_checks", {})
-        if not r["valid"]:
-            lines.append(f"| {r['scenario']} | FAIL | - | - | - | - | - | - |")
+    lines.append(
+        "| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |"
+    )
+    lines.append(
+        "|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|"
+    )
+    for row in results:
+        checks = row.get("constraint_checks", {})
+        if not row["valid"]:
+            lines.append(f"| {row['scenario']} | FAIL | - | - | - | - | - | - |")
             continue
 
-        def _fmt(v):
-            if v is True:
+        def _fmt(value):
+            if value is True or value == "pass":
                 return "PASS"
-            if v == "pass":
-                return "PASS"
-            if v == "n/a":
+            if value == "n/a":
                 return "n/a"
-            return str(v)
+            return str(value)
 
         lines.append(
-            f"| {r['scenario']} "
-            f"| {_fmt(cc.get('bounds', '?'))} "
-            f"| {_fmt(cc.get('no_collision', '?'))} "
-            f"| {_fmt(cc.get('support_60pct', '?'))} "
-            f"| {_fmt(cc.get('weight_limit', '?'))} "
-            f"| {_fmt(cc.get('strict_upright', '?'))} "
-            f"| {_fmt(cc.get('stackable', '?'))} "
-            f"| {cc.get('fragility_violations', '?')} |"
+            f"| {row['scenario']} "
+            f"| {_fmt(checks.get('bounds', '?'))} "
+            f"| {_fmt(checks.get('no_collision', '?'))} "
+            f"| {_fmt(checks.get('support_60pct', '?'))} "
+            f"| {_fmt(checks.get('weight_limit', '?'))} "
+            f"| {_fmt(checks.get('strict_upright', '?'))} "
+            f"| {_fmt(checks.get('stackable', '?'))} "
+            f"| {checks.get('fragility_violations', '?')} |"
         )
     lines.append("")
-
     return "\n".join(lines)
 
 

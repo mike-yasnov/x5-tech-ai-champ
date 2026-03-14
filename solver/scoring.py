@@ -70,7 +70,6 @@ def score_placement(
                 oy = max(0, min(y2, box.y_max) - max(y, box.y_min))
                 support_area += ox * oy
     support_score = min(1.0, support_area / max(1, dx * dy))
-    fragile_top_score = (z2 / max_h) if (fragile and max_h > 0) else fill_score
 
     center_score = 1.0 - min(
         1.0,
@@ -107,14 +106,6 @@ def score_placement(
             + 0.25 * center_score
             + 0.20 * fragility_score
             + 0.20 * height_score
-        )
-    elif policy == "fragile_safe":
-        total = (
-            0.35 * fragility_score
-            + 0.20 * support_score
-            + 0.15 * contact_score
-            + 0.15 * fragile_top_score
-            + 0.15 * height_score
         )
     else:
         total = (
