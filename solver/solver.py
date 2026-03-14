@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 # Auto-detect CI
 _IS_CI = os.environ.get("CI", "").lower() in ("true", "1", "yes") or os.environ.get("GITHUB_ACTIONS") == "true"
 
-# Parallel only on Linux (CI); macOS fork + short tasks = overhead > benefit
-N_WORKERS = int(os.environ.get("SOLVER_WORKERS", "2" if sys.platform.startswith("linux") else "1"))
+# Sequential by default: parallel fork overhead > benefit for short strategies
+N_WORKERS = int(os.environ.get("SOLVER_WORKERS", "1"))
 
 
 def _fast_score(pallet: Pallet, boxes: List[Box], solution: Solution) -> float:
