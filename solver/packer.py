@@ -72,6 +72,39 @@ def _sort_max_dim_desc(box: Box) -> tuple:
     return (-max(box.length_mm, box.width_mm, box.height_mm),)
 
 
+def _sort_heavy_base_fragile_top(box: Box) -> tuple:
+    """Heavy non-fragile first → heavy fragile → light fragile last.
+
+    Ideal for scenarios with mixed fragile/non-fragile items.
+    Places heavy stable base, then fragile items by weight desc
+    (so heavy fragile are placed while there's still space below lighter fragile).
+    """
+    if not box.fragile:
+        tier = 0  # Non-fragile first (base)
+    elif box.weight_kg > 2.0:
+        tier = 1  # Heavy fragile next
+    else:
+        tier = 2  # Light fragile last (top)
+    return (tier, -box.weight_kg, -box.volume)
+
+
+def _sort_stackable_base(box: Box) -> tuple:
+    """Stackable non-fragile first, then fragile, non-stackable last.
+
+    Focus on building a solid base with stackable items,
+    placing non-stackable on top where they won't block.
+    """
+    if not box.stackable:
+        tier = 3  # Non-stackable last
+    elif not box.fragile:
+        tier = 0  # Stackable non-fragile first
+    elif box.weight_kg > 2.0:
+        tier = 1  # Heavy fragile
+    else:
+        tier = 2  # Light fragile
+    return (tier, -box.volume)
+
+
 def _make_random_sort(seed: int) -> Callable[[Box], tuple]:
     """Create a deterministic pseudo-random sort key using hash."""
     def key(box: Box) -> tuple:
@@ -92,6 +125,8 @@ SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "height_desc": _sort_height_desc,                # Good overall
     "weight_desc": _sort_weight_desc,                # Secondary
     "max_dim_desc": _sort_max_dim_desc,              # Secondary
+    "heavy_base_fragile_top": _sort_heavy_base_fragile_top,  # Best for fragile_tower
+    "stackable_base": _sort_stackable_base,                  # Good for mixed scenarios
 }
 
 # Add randomized sort strategies for exploration
@@ -349,6 +384,104 @@ def pack_greedy_ml(
 
 
 # ── Best-fit packer (for small instances) ──────────────────────────
+
+def pack_two_phase(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+    sort_key_name: str = "volume_desc",
+    weight_profile: str = "default",
+) -> Solution:
+    """Two-phase packing: non-fragile items first (base), then fragile on top.
+
+    This avoids the problem where greedy places fragile items early,
+    blocking heavy items from being placed on top of them.
+    """
+    t0 = time.perf_counter()
+
+    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
+
+    # Split into phases
+    non_fragile = [b for b in boxes if not b.fragile]
+    heavy_fragile = [b for b in boxes if b.fragile and b.weight_kg > 2.0]
+    light_fragile = [b for b in boxes if b.fragile and b.weight_kg <= 2.0]
+
+    # Sort each phase
+    phase1 = sorted(non_fragile, key=sort_fn)
+    phase2 = sorted(heavy_fragile, key=sort_fn)
+    phase3 = sorted(light_fragile, key=sort_fn)
+
+    all_phases = [(phase1, "non_fragile"), (phase2, "heavy_fragile"), (phase3, "light_fragile")]
+
+    state = PalletState(pallet)
+    placements: List[Placement] = []
+    unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+
+    for phase_boxes, phase_name in all_phases:
+        instances = _expand_boxes(phase_boxes)
+        for box, inst_idx in instances:
+            orientations = get_orientations(box)
+            best_score = -1.0
+            best_placement = None
+
+            for ep in list(state.extreme_points):
+                ex, ey, ez = ep
+                for dx, dy, dz, rot_code in orientations:
+                    if not state.can_place(
+                        dx, dy, dz, ex, ey, ez,
+                        box.weight_kg, box.fragile, box.stackable,
+                    ):
+                        continue
+                    sc = score_placement(
+                        state, dx, dy, dz, ex, ey, ez,
+                        box.weight_kg, box.fragile,
+                        weight_profile=weight_profile,
+                    )
+                    if sc > best_score:
+                        best_score = sc
+                        best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+
+            if best_placement is not None:
+                dx, dy, dz, px, py, pz, rot_code = best_placement
+                state.place(
+                    box.sku_id, dx, dy, dz, px, py, pz,
+                    box.weight_kg, box.fragile, box.stackable,
+                )
+                placements.append(Placement(
+                    sku_id=box.sku_id, instance_index=inst_idx,
+                    x_mm=px, y_mm=py, z_mm=pz,
+                    length_mm=dx, width_mm=dy, height_mm=dz,
+                    rotation_code=rot_code,
+                ))
+            else:
+                if state.current_weight + box.weight_kg > pallet.max_weight_kg:
+                    reason = "weight_limit_exceeded"
+                else:
+                    reason = "no_space"
+                unplaced_counts[box.sku_id]["count"] += 1
+                unplaced_counts[box.sku_id]["reason"] = reason
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    unplaced = [
+        UnplacedItem(sku_id=sid, quantity_unplaced=info["count"], reason=info["reason"])
+        for sid, info in unplaced_counts.items()
+    ]
+
+    logger.info(
+        "[pack_two_phase] done sort=%s profile=%s placed=%d unplaced=%d time=%dms",
+        sort_key_name, weight_profile, len(placements),
+        sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
+    )
+
+    return Solution(
+        task_id=task_id,
+        solver_version=__version__,
+        solve_time_ms=elapsed_ms,
+        placements=placements,
+        unplaced=unplaced,
+    )
+
 
 MAX_BESTFIT_ITEMS = 50  # Only use for small instances
 

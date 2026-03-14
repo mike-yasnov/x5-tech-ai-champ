@@ -7,7 +7,7 @@ import time
 from typing import List, Optional
 
 from .models import Box, Pallet, Solution, solution_to_dict
-from .packer import SORT_KEYS, pack_greedy, pack_bestfit, MAX_BESTFIT_ITEMS
+from .packer import SORT_KEYS, pack_greedy, pack_two_phase, pack_bestfit, MAX_BESTFIT_ITEMS
 from .ml_ranker import MLPScorer
 
 # Add project root to path for validator import
@@ -59,34 +59,38 @@ def solve(
 
     sort_key_names = list(SORT_KEYS.keys())
 
-    # Build strategy list: (sort_key, weight_profile) pairs
-    # Interleave default and alternative profiles for diversity within budget
+    # Build strategy list: (sort_key, weight_profile, packer_type) triples
+    # packer_type: "greedy" or "two_phase"
     from .scoring import WEIGHT_PROFILES
-    alt_profiles = [p for p in WEIGHT_PROFILES if p != "default"]
     strategies = [
-        # Top 5 with default weights
-        (sort_key_names[0], "default"),  # constrained_first
-        (sort_key_names[1], "default"),  # base_area_desc
-        (sort_key_names[2], "default"),  # fragile_last
-        (sort_key_names[3], "default"),  # volume_desc
-        (sort_key_names[4], "default"),  # volume_asc
-        # Top sorts with alternative profiles
-        (sort_key_names[1], "contact_heavy"),  # base_area_desc + contact
-        (sort_key_names[3], "fill_heavy"),     # volume_desc + fill
-        (sort_key_names[0], "contact_heavy"),  # constrained_first + contact
-        # Remaining default sorts
-        (sort_key_names[5], "default"),  # density_desc
-        (sort_key_names[6], "default"),  # non_stackable_last
-        (sort_key_names[7], "default"),  # height_desc
-        (sort_key_names[8], "default"),  # weight_desc
-        (sort_key_names[9], "default"),  # max_dim_desc
+        # Core greedy strategies with default weights
+        (sort_key_names[0], "default", "greedy"),        # constrained_first
+        (sort_key_names[1], "default", "greedy"),        # base_area_desc
+        (sort_key_names[2], "default", "greedy"),        # fragile_last
+        (sort_key_names[3], "default", "greedy"),        # volume_desc
+        (sort_key_names[4], "default", "greedy"),        # volume_asc
+        # Key alternative profiles (proven winners)
+        (sort_key_names[1], "contact_heavy", "greedy"),  # base_area_desc + contact
+        (sort_key_names[3], "fill_heavy", "greedy"),     # volume_desc + fill
+        (sort_key_names[0], "contact_heavy", "greedy"),  # constrained_first + contact
+        # Two-phase strategies (good for fragile-heavy scenarios)
+        (sort_key_names[3], "default", "two_phase"),     # volume_desc two-phase
+        (sort_key_names[1], "default", "two_phase"),     # base_area_desc two-phase
+        # Additional greedy
+        ("heavy_base_fragile_top", "default", "greedy"),
+        ("stackable_base", "default", "greedy"),
+        (sort_key_names[5], "default", "greedy"),        # density_desc
+        (sort_key_names[6], "default", "greedy"),        # non_stackable_last
+        (sort_key_names[7], "default", "greedy"),        # height_desc
+        (sort_key_names[8], "default", "greedy"),        # weight_desc
+        (sort_key_names[9], "default", "greedy"),        # max_dim_desc
         # More alternatives
-        (sort_key_names[2], "fill_heavy"),
-        (sort_key_names[4], "contact_heavy"),
+        (sort_key_names[2], "fill_heavy", "greedy"),
+        (sort_key_names[1], "contact_heavy", "two_phase"),
     ]
     # Add remaining random sorts
-    for sn in sort_key_names[10:]:
-        strategies.append((sn, "default"))
+    for sn in sort_key_names[12:]:
+        strategies.append((sn, "default", "greedy"))
 
     logger.info(
         "[solve] task=%s restarts=%d budget=%dms strategies=%d",
@@ -119,9 +123,13 @@ def solve(
 
         strategy_t0 = time.perf_counter()
 
-        key_name, weight_profile = strategies[i]
-        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
-                               weight_profile=weight_profile)
+        key_name, weight_profile, packer_type = strategies[i]
+        if packer_type == "two_phase":
+            solution = pack_two_phase(task_id, pallet, boxes, sort_key_name=key_name,
+                                      weight_profile=weight_profile)
+        else:
+            solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
+                                   weight_profile=weight_profile)
 
         score = _evaluate_score(request_dict, solution)
         if score is None:
@@ -137,8 +145,8 @@ def solve(
         )
 
         logger.info(
-            "[solve] restart=%d sort=%s profile=%s score=%.4f placed=%d time=%.0fms est_ci=%.0fms",
-            i, key_name, weight_profile, score, len(solution.placements),
+            "[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms est_ci=%.0fms",
+            i, key_name, weight_profile, packer_type, score, len(solution.placements),
             strategy_ms, strategy_ms * CI_SLOWDOWN_FACTOR,
         )
 
@@ -166,47 +174,34 @@ def solve(
             best_solution = bf_solution
             best_key = "bestfit"
 
-    # Try ML-guided greedy (if model available and time allows)
+    # LNS post-processing: improve best solution by destroy + repair
     elapsed_so_far = (time.perf_counter() - t0) * 1000
     estimated_ci_elapsed = elapsed_so_far * CI_SLOWDOWN_FACTOR
-    if estimated_ci_elapsed < time_budget_ms * 0.5:
-        scorer = MLPScorer.load()
-        if scorer is not None and scorer.is_loaded:
-            try:
-                from .packer import pack_greedy_ml
-                # Try ML scorer with top 3 sort strategies
-                ml_sorts = ["constrained_first", "base_area_desc", "volume_desc"]
-                if best_key and best_key not in ("bestfit",) and best_key not in ml_sorts:
-                    ml_sorts.insert(0, best_key)
-
-                ml_time_limit = int((time_budget_ms / CI_SLOWDOWN_FACTOR - elapsed_so_far) * 0.8)
-                per_strategy_limit = ml_time_limit // len(ml_sorts) if ml_sorts else ml_time_limit
-
-                for ml_sort in ml_sorts:
-                    elapsed_now = (time.perf_counter() - t0) * 1000
-                    est_ci = elapsed_now * CI_SLOWDOWN_FACTOR
-                    if est_ci > time_budget_ms * 0.85:
-                        break
-
-                    logger.info("[solve] trying ML greedy: sort=%s", ml_sort)
-                    ml_solution = pack_greedy_ml(
-                        task_id, pallet, boxes, scorer,
-                        sort_key_name=ml_sort,
-                        time_limit_ms=per_strategy_limit,
-                    )
-                    ml_score = _evaluate_score(request_dict, ml_solution)
-                    if ml_score is None:
-                        ml_score = len(ml_solution.placements) / max(1, total_items)
-                    logger.info(
-                        "[solve] ML greedy sort=%s score=%.4f placed=%d",
-                        ml_sort, ml_score, len(ml_solution.placements),
-                    )
-                    if ml_score > best_score:
-                        best_score = ml_score
-                        best_solution = ml_solution
-                        best_key = f"ml_{ml_sort}"
-            except Exception as e:
-                logger.warning("[solve] ML greedy failed: %s", e)
+    remaining_ci_ms = time_budget_ms - estimated_ci_elapsed
+    if best_solution is not None and remaining_ci_ms > 50 and len(best_solution.placements) > 0:
+        try:
+            from .lns import lns_optimize
+            lns_budget = int(remaining_ci_ms / CI_SLOWDOWN_FACTOR * 0.9) if CI_SLOWDOWN_FACTOR > 1 else int(remaining_ci_ms * 0.9)
+            logger.info("[solve] LNS post-processing: budget=%dms remaining_ci=%.0fms", lns_budget, remaining_ci_ms)
+            lns_solution = lns_optimize(
+                task_id, pallet, boxes, best_solution,
+                destroy_fraction=0.3,
+                max_iterations=50,
+                time_budget_ms=lns_budget,
+            )
+            lns_score = _evaluate_score(request_dict, lns_solution)
+            if lns_score is not None and lns_score > best_score:
+                logger.info(
+                    "[solve] LNS improved: %.4f -> %.4f placed=%d",
+                    best_score, lns_score, len(lns_solution.placements),
+                )
+                best_score = lns_score
+                best_solution = lns_solution
+                best_key = f"lns_{best_key}"
+            elif lns_score is not None:
+                logger.info("[solve] LNS no improvement: %.4f vs %.4f", lns_score, best_score)
+        except Exception as e:
+            logger.warning("[solve] LNS failed: %s", e)
 
     # Update solve_time_ms to total time
     total_ms = int((time.perf_counter() - t0) * 1000)

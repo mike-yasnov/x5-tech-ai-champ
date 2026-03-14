@@ -13,10 +13,12 @@ W_FILL = 0.20
 W_LAYER = 0.15   # Reward layer-aligned placements
 
 # Alternative weight profiles for multi-restart
+# Format: (height, contact, fragility, fill, layer)
 WEIGHT_PROFILES = {
     "default": (0.30, 0.25, 0.10, 0.20, 0.15),
     "contact_heavy": (0.25, 0.30, 0.10, 0.20, 0.15),
     "fill_heavy": (0.20, 0.25, 0.10, 0.30, 0.15),
+    "layer_heavy": (0.20, 0.20, 0.10, 0.20, 0.30),
 }
 
 
