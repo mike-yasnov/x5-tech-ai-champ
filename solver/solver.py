@@ -4,7 +4,8 @@ import logging
 import os
 import sys
 import time
-from typing import List, Optional
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import List, Optional, Tuple
 
 from .models import Box, Pallet, Solution, solution_to_dict
 from .packer import SORT_KEYS, pack_greedy, pack_two_phase, pack_bestfit, MAX_BESTFIT_ITEMS
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Locally, estimate CI time with slowdown factor
 _IS_CI = os.environ.get("CI", "").lower() in ("true", "1", "yes") or os.environ.get("GITHUB_ACTIONS") == "true"
 CI_SLOWDOWN_FACTOR = 1.0 if _IS_CI else 3.5
+
+# Number of parallel workers (CI has 2 cores)
+N_WORKERS = int(os.environ.get("SOLVER_WORKERS", "2"))
 
 
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
@@ -39,6 +43,134 @@ def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
         return None
 
 
+def _run_strategy(args: tuple) -> Tuple[float, Solution, str, str, str, float]:
+    """Worker function: run a single packing strategy. Must be top-level for pickling."""
+    task_id, pallet, boxes, key_name, weight_profile, packer_type, request_dict = args
+    import time as _time
+
+    # Ensure validator is importable
+    sys.path.insert(0, ".")
+
+    t0 = _time.perf_counter()
+    if packer_type == "two_phase":
+        solution = pack_two_phase(task_id, pallet, boxes, sort_key_name=key_name,
+                                  weight_profile=weight_profile)
+    else:
+        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
+                               weight_profile=weight_profile)
+
+    score = _evaluate_score(request_dict, solution)
+    if score is None:
+        score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
+
+    strategy_ms = (_time.perf_counter() - t0) * 1000
+    return score, solution, key_name, weight_profile, packer_type, strategy_ms
+
+
+def _run_strategies_sequential(
+    task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+) -> Tuple[Optional[Solution], float, str]:
+    """Run strategies sequentially with adaptive time stopping."""
+    best_solution = None
+    best_score = -1.0
+    best_key = ""
+    estimated_ci_time_per_strategy = 0.0
+
+    for i in range(n_to_run):
+        elapsed = (time.perf_counter() - t0) * 1000
+        if i > 0:
+            estimated_ci_total = elapsed * CI_SLOWDOWN_FACTOR
+            if estimated_ci_total > strategy_budget_ms * 0.9:
+                logger.info("[solve] adaptive stop at restart %d (est CI %.0fms)", i, estimated_ci_total)
+                break
+            if estimated_ci_total + estimated_ci_time_per_strategy > strategy_budget_ms:
+                logger.info("[solve] adaptive stop: next would push to %.0fms at restart %d",
+                            estimated_ci_total + estimated_ci_time_per_strategy, i)
+                break
+
+        key_name, weight_profile, packer_type = strategies[i]
+        strategy_t0 = time.perf_counter()
+
+        if packer_type == "two_phase":
+            solution = pack_two_phase(task_id, pallet, boxes, sort_key_name=key_name,
+                                      weight_profile=weight_profile)
+        else:
+            solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
+                                   weight_profile=weight_profile)
+
+        score = _evaluate_score(request_dict, solution)
+        if score is None:
+            score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
+
+        strategy_ms = (time.perf_counter() - strategy_t0) * 1000
+        estimated_ci_time_per_strategy = max(estimated_ci_time_per_strategy, strategy_ms * CI_SLOWDOWN_FACTOR)
+
+        logger.info("[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms",
+                    i, key_name, weight_profile, packer_type, score, len(solution.placements), strategy_ms)
+
+        if score > best_score:
+            best_score = score
+            best_solution = solution
+            best_key = key_name
+
+    return best_solution, best_score, best_key
+
+
+def _run_strategies_parallel(
+    task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+) -> Tuple[Optional[Solution], float, str]:
+    """Run strategies in parallel using ProcessPoolExecutor."""
+    best_solution = None
+    best_score = -1.0
+    best_key = ""
+
+    # Prepare args for all strategies
+    args_list = [
+        (task_id, pallet, boxes, s[0], s[1], s[2], request_dict)
+        for s in strategies[:n_to_run]
+    ]
+
+    # Use 'fork' context on Linux (CI) for fast process creation
+    # On macOS, 'fork' can be unsafe with some libraries but works here
+    import multiprocessing
+    ctx = multiprocessing.get_context("fork")
+
+    with ProcessPoolExecutor(max_workers=N_WORKERS, mp_context=ctx) as pool:
+        futures = {pool.submit(_run_strategy, args): i for i, args in enumerate(args_list)}
+
+        completed = 0
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                score, solution, key_name, weight_profile, packer_type, strategy_ms = future.result()
+            except Exception as e:
+                logger.warning("[solve] strategy %d failed: %s", idx, e)
+                continue
+
+            completed += 1
+            logger.info("[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms",
+                        idx, key_name, weight_profile, packer_type, score, len(solution.placements), strategy_ms)
+
+            if score > best_score:
+                best_score = score
+                best_solution = solution
+                best_key = key_name
+
+            # Check wall-clock budget — cancel remaining if exceeded
+            elapsed = (time.perf_counter() - t0) * 1000
+            estimated_ci_elapsed = elapsed * CI_SLOWDOWN_FACTOR
+            if estimated_ci_elapsed > strategy_budget_ms:
+                logger.info("[solve] parallel budget reached at %d/%d completed (est CI %.0fms)",
+                            completed, n_to_run, estimated_ci_elapsed)
+                for f in futures:
+                    f.cancel()
+                break
+
+    logger.info("[solve] parallel done: %d strategies completed, best_score=%.4f best_key=%s",
+                completed, best_score, best_key)
+    return best_solution, best_score, best_key
+
+
 def solve(
     task_id: str,
     pallet: Pallet,
@@ -49,8 +181,8 @@ def solve(
 ) -> Solution:
     """Run greedy packer with multiple sort strategies and return the best solution.
 
-    Uses adaptive time management: estimates CI slowdown from first strategy
-    to decide how many additional strategies to try.
+    Uses parallel execution with ProcessPoolExecutor (2 workers on CI).
+    Falls back to sequential if parallel fails.
     """
     t0 = time.perf_counter()
     best_solution: Optional[Solution] = None
@@ -60,7 +192,6 @@ def solve(
     sort_key_names = list(SORT_KEYS.keys())
 
     # Build strategy list: (sort_key, weight_profile, packer_type) triples
-    # packer_type: "greedy" or "two_phase"
     from .scoring import WEIGHT_PROFILES
     strategies = [
         # Core greedy strategies with default weights
@@ -92,68 +223,33 @@ def solve(
     for sn in sort_key_names[12:]:
         strategies.append((sn, "default", "greedy"))
 
+    n_to_run = min(n_restarts, len(strategies))
+
     logger.info(
-        "[solve] task=%s restarts=%d budget=%dms strategies=%d",
-        task_id, n_restarts, time_budget_ms, len(strategies),
+        "[solve] task=%s restarts=%d budget=%dms strategies=%d workers=%d",
+        task_id, n_restarts, time_budget_ms, len(strategies), N_WORKERS,
     )
 
-    estimated_ci_time_per_strategy = 0.0
+    # --- Parallel strategy evaluation ---
+    # With N_WORKERS=2, we run strategies in parallel to fit more into the time budget.
+    # Time budget applies to wall-clock time (parallel reduces it by ~N_WORKERS factor).
+    # Strategy budget: leave 35% of total budget for LNS + postprocessing
+    strategy_budget_ms = time_budget_ms * 0.65
 
-    for i in range(min(n_restarts, len(strategies))):
-        elapsed = (time.perf_counter() - t0) * 1000
-
-        if i > 0:
-            # Estimate how much time CI would need for remaining strategies
-            estimated_ci_total = elapsed * CI_SLOWDOWN_FACTOR
-            if estimated_ci_total > time_budget_ms * 0.9:
-                logger.info(
-                    "[solve] adaptive stop: est. CI time %.0fms > budget %.0fms at restart %d",
-                    estimated_ci_total, time_budget_ms * 0.9, i,
-                )
-                break
-
-            # Also check: would adding one more strategy exceed CI budget?
-            est_next = estimated_ci_total + estimated_ci_time_per_strategy
-            if est_next > time_budget_ms:
-                logger.info(
-                    "[solve] adaptive stop: next strategy would push CI to %.0fms at restart %d",
-                    est_next, i,
-                )
-                break
-
-        strategy_t0 = time.perf_counter()
-
-        key_name, weight_profile, packer_type = strategies[i]
-        if packer_type == "two_phase":
-            solution = pack_two_phase(task_id, pallet, boxes, sort_key_name=key_name,
-                                      weight_profile=weight_profile)
-        else:
-            solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name,
-                                   weight_profile=weight_profile)
-
-        score = _evaluate_score(request_dict, solution)
-        if score is None:
-            # Fallback: use placement count as proxy
-            score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
-
-        strategy_ms = (time.perf_counter() - strategy_t0) * 1000
-
-        # Update per-strategy time estimate (use max for safety)
-        estimated_ci_time_per_strategy = max(
-            estimated_ci_time_per_strategy,
-            strategy_ms * CI_SLOWDOWN_FACTOR,
+    if N_WORKERS > 1:
+        try:
+            best_solution, best_score, best_key = _run_strategies_parallel(
+                task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+            )
+        except Exception as e:
+            logger.warning("[solve] parallel execution failed, falling back to sequential: %s", e)
+            best_solution, best_score, best_key = _run_strategies_sequential(
+                task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
+            )
+    else:
+        best_solution, best_score, best_key = _run_strategies_sequential(
+            task_id, pallet, boxes, request_dict, strategies, n_to_run, strategy_budget_ms, t0,
         )
-
-        logger.info(
-            "[solve] restart=%d sort=%s profile=%s packer=%s score=%.4f placed=%d time=%.0fms est_ci=%.0fms",
-            i, key_name, weight_profile, packer_type, score, len(solution.placements),
-            strategy_ms, strategy_ms * CI_SLOWDOWN_FACTOR,
-        )
-
-        if score > best_score:
-            best_score = score
-            best_solution = solution
-            best_key = key_name
 
     # Try best-fit for small instances (if time allows)
     total_items = sum(b.quantity for b in boxes)
@@ -204,10 +300,22 @@ def solve(
             logger.warning("[solve] LNS failed: %s", e)
 
     # Post-processing: compact-down + try-insert
+    # Use remaining wall-clock time with a minimum of 50ms
+    elapsed_so_far = (time.perf_counter() - t0) * 1000
+    # On CI: use remaining time directly. Locally: estimate remaining CI time
+    if _IS_CI:
+        pp_budget = max(50, int((time_budget_ms - elapsed_so_far) * 0.8))
+    else:
+        # Locally we're faster; give postprocess enough time
+        pp_budget = 200
     if best_solution is not None and len(best_solution.placements) > 0:
         try:
             from .postprocess import postprocess_solution
-            pp_solution = postprocess_solution(task_id, pallet, boxes, best_solution)
+            logger.info("[solve] postprocess: budget=%dms elapsed=%.0fms", pp_budget, elapsed_so_far)
+            pp_solution = postprocess_solution(
+                task_id, pallet, boxes, best_solution,
+                time_budget_ms=pp_budget,
+            )
             pp_score = _evaluate_score(request_dict, pp_solution)
             if pp_score is not None and pp_score > best_score:
                 logger.info(

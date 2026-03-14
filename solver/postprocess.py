@@ -138,46 +138,39 @@ def compact_downward(
 
 
 def _generate_gap_eps(state: PalletState) -> List[Tuple[int, int, int]]:
-    """Generate extra extreme points by scanning all box boundaries.
+    """Generate extra extreme points by scanning box boundaries.
 
-    Creates a grid of potential positions at intersections of
-    existing box edges and z-levels, finding gaps the standard
-    EP generation might miss.
+    Uses a spatial index for fast inside-box checks.
     """
     if not state.boxes:
         return []
 
-    # Collect all unique x, y, z boundaries
-    x_coords = {0}
-    y_coords = {0}
-    z_coords = {0}
-    for box in state.boxes:
-        x_coords.update([box.x_min, box.x_max])
-        y_coords.update([box.y_min, box.y_max])
-        z_coords.update([box.z_min, box.z_max])
+    # Collect all unique x, y boundaries
+    x_coords = sorted({0} | {b.x_min for b in state.boxes} | {b.x_max for b in state.boxes})
+    y_coords = sorted({0} | {b.y_min for b in state.boxes} | {b.y_max for b in state.boxes})
+    z_tops = sorted({0} | {b.z_max for b in state.boxes})
 
-    # Only keep z_max values (top surfaces where new boxes can rest)
-    z_tops = sorted({box.z_max for box in state.boxes} | {0})
+    # Filter to valid bounds
+    x_coords = [x for x in x_coords if x < state.pallet.length_mm]
+    y_coords = [y for y in y_coords if y < state.pallet.width_mm]
+    z_tops = [z for z in z_tops if z < state.pallet.max_height_mm]
 
+    # Build z-interval index for faster inside checks
+    # For each (x,y) we check against all boxes — use early exit
     extra_eps = []
-    x_sorted = sorted(x_coords)
-    y_sorted = sorted(y_coords)
+    boxes = state.boxes
 
     for z in z_tops:
-        if z >= state.pallet.max_height_mm:
-            continue
-        for x in x_sorted:
-            if x >= state.pallet.length_mm:
-                continue
-            for y in y_sorted:
-                if y >= state.pallet.width_mm:
-                    continue
-                # Check not inside any box
+        # Pre-filter boxes that span this z level
+        z_boxes = [b for b in boxes if b.z_min <= z < b.z_max]
+
+        for x in x_coords:
+            for y in y_coords:
+                # Check not inside any box at this z
                 inside = False
-                for box in state.boxes:
+                for box in z_boxes:
                     if (box.x_min <= x < box.x_max
-                            and box.y_min <= y < box.y_max
-                            and box.z_min <= z < box.z_max):
+                            and box.y_min <= y < box.y_max):
                         inside = True
                         break
                 if not inside:
@@ -195,12 +188,15 @@ def try_insert_unplaced(
     boxes: List[Box],
     boxes_meta: Dict[str, Box],
     weight_profile: str = "default",
+    time_budget_ms: int = 500,
 ) -> Tuple[List[Placement], List[UnplacedItem]]:
     """Try to insert unplaced items into remaining gaps.
 
     Rebuilds state from existing placements, generates extra EPs
     from box boundary grid, then tries to fit remaining items.
     """
+    import time as _time
+    t0 = _time.perf_counter()
     # Figure out what's unplaced
     placed_counts: Dict[str, int] = defaultdict(int)
     for p in placements:
@@ -239,7 +235,15 @@ def try_insert_unplaced(
     still_unplaced: Dict[str, int] = defaultdict(int)
     inserted = 0
 
-    for box, inst_idx in unplaced_items:
+    for item_i, (box, inst_idx) in enumerate(unplaced_items):
+        # Time check every item
+        elapsed = (_time.perf_counter() - t0) * 1000
+        if elapsed > time_budget_ms * 0.9:
+            logger.debug("[try_insert] time budget reached after %d items", item_i)
+            for remaining_box, remaining_idx in unplaced_items[item_i:]:
+                still_unplaced[remaining_box.sku_id] += 1
+            break
+
         orientations = get_orientations(box)
         best_score = -1.0
         best_placement = None
@@ -297,19 +301,41 @@ def postprocess_solution(
     pallet: Pallet,
     boxes: List[Box],
     solution: Solution,
+    time_budget_ms: int = 500,
 ) -> Solution:
     """Apply all post-processing steps to improve a solution."""
+    import time as _time
+    t0 = _time.perf_counter()
+
     boxes_meta: Dict[str, Box] = {b.sku_id: b for b in boxes}
 
-    # Step 1: Compact downward
+    # Step 1: Compact downward (fast)
     placements = compact_downward(pallet, list(solution.placements), boxes_meta)
 
-    # Step 2: Try insert unplaced items
-    placements, unplaced = try_insert_unplaced(
-        pallet, placements, boxes, boxes_meta,
-    )
+    # Step 2: Try insert unplaced items (can be slow)
+    elapsed = (_time.perf_counter() - t0) * 1000
+    remaining = time_budget_ms - elapsed
+    if remaining > 50:
+        placements, unplaced = try_insert_unplaced(
+            pallet, placements, boxes, boxes_meta,
+            time_budget_ms=int(remaining * 0.9),
+        )
+    else:
+        # Build unplaced list without trying
+        placed_counts: Dict[str, int] = defaultdict(int)
+        for p in placements:
+            placed_counts[p.sku_id] += 1
+        unplaced = []
+        for box in boxes:
+            placed = placed_counts.get(box.sku_id, 0)
+            if placed < box.quantity:
+                unplaced.append(UnplacedItem(
+                    sku_id=box.sku_id,
+                    quantity_unplaced=box.quantity - placed,
+                    reason="no_space",
+                ))
 
-    # Step 3: Compact again after insertions
+    # Step 3: Compact again after insertions (fast)
     if len(placements) > len(solution.placements):
         placements = compact_downward(pallet, placements, boxes_meta)
 
