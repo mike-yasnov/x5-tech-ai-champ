@@ -149,7 +149,8 @@ class PalletState:
     def _update_extreme_points(self, placed: PlacedBox) -> None:
         """Generate new extreme points from projections of placed box.
 
-        Uses standard 3 face projections + projected corner EPs for gap filling.
+        Uses standard 3 face projections + projected corner EPs + face projections
+        for gap filling and tight-fitting positions.
         """
         new_eps = [
             # Right face projection
@@ -158,17 +159,24 @@ class PalletState:
             (placed.x_min, placed.y_max, placed.z_min),
             # Top face projection
             (placed.x_min, placed.y_min, placed.z_max),
+            # Additional top corners
+            (placed.x_max, placed.y_min, placed.z_max),
+            (placed.x_min, placed.y_max, placed.z_max),
         ]
 
-        # Additional: project placed box corners onto existing box faces
-        # This helps find positions in gaps between boxes
+        # Project placed box edges onto existing box faces
         for box in self.boxes:
             if box is placed:
                 continue
-            # If placed box is to the right of existing box, create EP at (box.x_max, placed.y_min, placed.z_min)
-            if box.x_max <= placed.x_max and box.x_max > placed.x_min:
+            # Top of existing box at placed box's XY corners
+            if box.z_max <= placed.z_max:
                 new_eps.append((placed.x_min, placed.y_min, box.z_max))
-            # If placed box is in front of existing box
+                new_eps.append((placed.x_max, placed.y_min, box.z_max))
+                new_eps.append((placed.x_min, placed.y_max, box.z_max))
+            # Right of existing box at placed box's Y,Z corners
+            if box.x_max <= placed.x_max and box.x_max > placed.x_min:
+                new_eps.append((box.x_max, placed.y_min, placed.z_min))
+            # Front of existing box at placed box's X,Z corners
             if box.y_max <= placed.y_max and box.y_max > placed.y_min:
                 new_eps.append((placed.x_min, box.y_max, placed.z_min))
 
@@ -206,7 +214,7 @@ class PalletState:
         # Deduplicate, sort by (z, x, y) to prioritize lower positions, cap count
         # Sort by (z, x, y) — prefer lower positions for bottom-up layer filling
         # Cap to limit computational cost for heavy scenarios
-        self.extreme_points = sorted(set(valid_eps), key=lambda ep: (ep[2], ep[0], ep[1]))[:150]
+        self.extreme_points = sorted(set(valid_eps), key=lambda ep: (ep[2], ep[0], ep[1]))[:200]
 
     def get_fragile_boxes_at_top(self, z: int, x1: int, y1: int, x2: int, y2: int) -> List[PlacedBox]:
         """Find fragile boxes whose top face is at z and overlap with given XY rectangle."""
