@@ -1,4 +1,4 @@
-name: CI — Tests & Benchmark
+name: CI - Tests and Benchmark
 
 on:
   push:
@@ -67,74 +67,104 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          path: candidate
+          clean: false
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: baseline
           clean: false
 
       - name: Restore pip cache
         uses: actions/cache@v4
         with:
           path: .pip-cache
-          key: pip-${{ runner.os }}-3.12-${{ hashFiles('requirements.txt') }}
+          key: pip-${{ runner.os }}-benchmark-${{ hashFiles('candidate/requirements.txt') }}
           restore-keys: |
-            pip-${{ runner.os }}-3.12-
+            pip-${{ runner.os }}-benchmark-
 
       - name: Create virtual environment
         run: |
           python -m venv .venv
-          ./.venv/bin/pip install -r requirements.txt
+          ./.venv/bin/pip install -r candidate/requirements.txt
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Run benchmark
-        id: bench
+      - name: Run candidate benchmark
         run: |
-          python benchmark.py --output benchmark_results.json --viz viz 2>/dev/null | tee benchmark_output.md
+          cd candidate
+          python benchmark.py --output benchmark_candidate.json --viz viz 2>/dev/null | tee benchmark_output.md
+
+      - name: Run method benchmark
+        run: |
+          cd candidate
+          python benchmark_methods.py \
+            --methods solver strategy:volume_desc strategy:base_area_desc strategy:weight_desc strategy:density_desc strategy:constrained_first \
+            --scenario-set smoke \
+            --output method_benchmark.json \
+            --markdown-output method_benchmark.md
+
+      - name: Run baseline benchmark
+        run: |
+          cd baseline
+          python benchmark.py --output benchmark_baseline.json > /dev/null
+
+      - name: Compare candidate with baseline
+        run: |
+          cd candidate
+          python compare_benchmarks.py \
+            --baseline ../baseline/benchmark_baseline.json \
+            --candidate benchmark_candidate.json \
+            --output comparison_report.json \
+            --markdown-output comparison_report.md
 
       - name: Upload 3D visualizations
         uses: actions/upload-artifact@v4
         with:
           name: 3d-pallet-visualizations
-          path: viz/*.html
+          path: candidate/viz/*.html
           retention-days: 30
-
-      - name: Run strategy benchmark
-        id: strategy_bench
-        run: |
-          python benchmark_strategies.py --limit 0 --output strategy_results.json --markdown-output strategy_output_full.md > /dev/null
-          python benchmark_strategies.py --limit 8 --markdown-output strategy_output.md 2>/dev/null | tee strategy_output.md
 
       - name: Add benchmark to job summary
         run: |
+          cd candidate
           echo "# Solver Benchmark" >> "$GITHUB_STEP_SUMMARY"
           cat benchmark_output.md >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "# Strategy Benchmark (Top 8 per scenario)" >> "$GITHUB_STEP_SUMMARY"
-          cat strategy_output.md >> "$GITHUB_STEP_SUMMARY"
+          echo "# Baseline Comparison" >> "$GITHUB_STEP_SUMMARY"
+          cat comparison_report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "# Method Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          cat method_benchmark.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: |
-            benchmark_results.json
-            benchmark_output.md
-            strategy_results.json
-            strategy_output.md
-            strategy_output_full.md
+            baseline/benchmark_baseline.json
+            candidate/benchmark_candidate.json
+            candidate/benchmark_output.md
+            candidate/comparison_report.json
+            candidate/comparison_report.md
+            candidate/method_benchmark.json
+            candidate/method_benchmark.md
 
       - name: Post benchmark results to PR
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const output = fs.readFileSync('benchmark_output.md', 'utf8');
-            const strategyOutput = fs.readFileSync('strategy_output.md', 'utf8');
-            const results = JSON.parse(fs.readFileSync('benchmark_results.json', 'utf8'));
+            const output = fs.readFileSync('candidate/benchmark_output.md', 'utf8');
+            const comparisonOutput = fs.readFileSync('candidate/comparison_report.md', 'utf8');
+            const methodOutput = fs.readFileSync('candidate/method_benchmark.md', 'utf8');
+            const comparison = JSON.parse(fs.readFileSync('candidate/comparison_report.json', 'utf8'));
 
-            const allValid = results.every(r => r.valid);
-            const status = allValid ? '✅' : '❌';
+            const status = comparison.should_fail ? 'FAIL' : 'OK';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const vizSection = `\n\n### 🎨 3D Visualizations\n\nInteractive 3D pallet views available as build artifacts:\n\n📦 [Download visualizations](${runUrl}) → Artifacts → \`3d-pallet-visualizations\`\n\nOpen the HTML files in a browser to rotate, zoom, and inspect placements.`;
-            const body = `### ${status} Benchmark Results\n\n${output}\n\n### Strategy Comparison (Top 8 per scenario)\n\n${strategyOutput}\n\nFull strategy benchmark is attached in CI artifacts as \`strategy_results.json\` and \`strategy_output_full.md\`. ${vizSection}\n\n---\n*Automated benchmark by CI*`;
+            const vizSection = `\n\n### Visualizations\n\nDownload them from artifacts: ${runUrl}`;
+            const body = `### ${status} Benchmark Results\n\n${output}\n\n${comparisonOutput}\n\n### Method Comparison\n\n${methodOutput}\n\nFull benchmark data is attached in CI artifacts as \`benchmark_candidate.json\`, \`benchmark_baseline.json\`, \`comparison_report.json\`, and \`method_benchmark.json\`. ${vizSection}\n\n---\nAutomated benchmark by CI`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -161,3 +191,14 @@ jobs:
                 body: body,
               });
             }
+
+      - name: Enforce regression thresholds
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('candidate/comparison_report.json').read_text())
+          if report.get('should_fail'):
+              raise SystemExit('Benchmark regression thresholds exceeded')
+          PY

@@ -12,6 +12,7 @@ import os
 import sys
 import time
 
+from benchmark_utils import compute_quality_score
 from generator import generate_scenario
 from solver.packer import SORT_KEYS
 from validator import evaluate_solution
@@ -96,6 +97,7 @@ def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
             "scenario": scenario_type,
             "valid": eval_result.get("valid", False),
             "final_score": eval_result.get("final_score", 0.0),
+            "quality_score": compute_quality_score(eval_result.get("metrics", {})),
             "metrics": eval_result.get("metrics", {}),
             "constraint_checks": eval_result.get("constraint_checks", {}),
             "placed": len(solution.placements),
@@ -172,8 +174,12 @@ def format_markdown(results: list) -> str:
     lines.append("")
     lines.append("### Constraint Compliance")
     lines.append("")
-    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
-    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
+    lines.append(
+        "| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |"
+    )
+    lines.append(
+        "|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|"
+    )
     for r in results:
         cc = r.get("constraint_checks", {})
         if not r["valid"]:
