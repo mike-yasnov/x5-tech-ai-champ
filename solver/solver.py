@@ -177,7 +177,7 @@ def solve(
     pallet: Pallet,
     boxes: List[Box],
     request_dict: dict,
-    n_restarts: int = 10,
+    n_restarts: int = 30,
     time_budget_ms: int = 900,
 ) -> Solution:
     """Run greedy packer with multiple sort strategies and return the best solution.
@@ -219,6 +219,18 @@ def solve(
         # More alternatives
         (sort_key_names[2], "fill_heavy", "greedy"),
         (sort_key_names[1], "contact_heavy", "two_phase"),
+        # === New profiles (positions 19+, run with 30 restarts) ===
+        (sort_key_names[2], "fragile_avoid", "greedy"),       # fragile_last + fragile_avoid
+        ("heavy_base_fragile_top", "fragile_avoid", "greedy"),
+        (sort_key_names[0], "fragile_avoid", "greedy"),       # constrained_first + fragile_avoid
+        (sort_key_names[2], "fragile_avoid", "two_phase"),
+        (sort_key_names[1], "wall_hugger", "greedy"),
+        (sort_key_names[3], "compact", "greedy"),
+        (sort_key_names[1], "layer_heavy", "greedy"),
+        (sort_key_names[3], "layer_heavy", "greedy"),
+        ("stackable_base", "fragile_avoid", "greedy"),
+        (sort_key_names[0], "compact", "greedy"),
+        ("heavy_base_fragile_top", "wall_hugger", "greedy"),
     ]
     # Add remaining random sorts
     for sn in sort_key_names[12:]:
@@ -283,7 +295,7 @@ def solve(
             lns_solution = lns_optimize(
                 task_id, pallet, boxes, best_solution,
                 destroy_fraction=0.3,
-                max_iterations=50,
+                max_iterations=100,
                 time_budget_ms=lns_budget,
             )
             lns_score = _evaluate_score(request_dict, lns_solution)

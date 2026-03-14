@@ -147,18 +147,33 @@ def lns_optimize(
         n_destroy = max(1, int(len(best_placements) * destroy_fraction))
         n_destroy = min(n_destroy, len(best_placements))
 
-        if iteration % 2 == 0:
+        if iteration % 3 == 0:
             # Random destroy
             destroy_indices = set(rng.sample(range(len(best_placements)), n_destroy))
-        else:
+        elif iteration % 3 == 1:
             # Worst-position destroy: remove items placed highest (least stable)
             scored = []
             for i, p in enumerate(best_placements):
-                # Higher z = worse, smaller volume = worse
                 badness = p.z_mm * 1000 - p.length_mm * p.width_mm * p.height_mm
                 scored.append((badness, i))
             scored.sort(reverse=True)
             destroy_indices = set(idx for _, idx in scored[:n_destroy])
+        else:
+            # Fragility-aware destroy: target items involved in violations
+            from .postprocess import _find_fragility_violations
+            violations = _find_fragility_violations(best_placements, boxes_meta)
+            violation_indices = set()
+            for hi, fi in violations:
+                violation_indices.add(hi)
+                violation_indices.add(fi)
+            destroy_indices = set()
+            for idx in violation_indices:
+                if len(destroy_indices) < n_destroy:
+                    destroy_indices.add(idx)
+            remaining_indices = [i for i in range(len(best_placements)) if i not in destroy_indices]
+            if len(destroy_indices) < n_destroy and remaining_indices:
+                extra = rng.sample(remaining_indices, min(n_destroy - len(destroy_indices), len(remaining_indices)))
+                destroy_indices.update(extra)
 
         kept_placements = []
         destroyed_items: List[Tuple[Box, int]] = []
