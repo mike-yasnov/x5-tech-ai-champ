@@ -10,9 +10,13 @@ from solver.hybrid.pallet_state import PalletState, PlacedBox
 from solver.models import Box, Pallet, solution_to_dict
 from solver.portfolio_block import (
     _BlockSpec,
+    _generate_exact_orderings,
     _fragile_staged_instances,
     _materialize_block_candidate,
+    _should_try_strict_fragility_search,
+    PolicyRun,
 )
+from solver.scenario_selector import compute_request_fingerprint
 from solver.solver import solve
 from validator import evaluate_solution
 
@@ -225,3 +229,102 @@ def test_fragile_staged_instances_prefers_sturdy_then_anchors_then_light_fragile
     assert staged_skus[:4] == ["STURDY"] * 4
     assert staged_skus[4:6] == ["FRAG_HEAVY"] * 2
     assert staged_skus[6] == "FRAG_LIGHT"
+
+
+def test_generate_exact_orderings_returns_all_unique_permutations_except_current():
+    boxes = [
+        Box("A", "", 100, 100, 100, 1.0, 1),
+        Box("B", "", 100, 100, 100, 1.0, 1),
+        Box("C", "", 100, 100, 100, 1.0, 1),
+    ]
+
+    orderings = _generate_exact_orderings(boxes)
+    keys = {tuple(box.sku_id for box in ordering) for ordering in orderings}
+
+    assert len(orderings) == 5
+    assert len(keys) == 5
+    assert ("A", "B", "C") not in keys
+
+
+def test_strict_fragility_search_gates_on_near_fit_heavy_fragile_requests():
+    fragile_mix_request = {
+        "task_id": "strict-gate",
+        "pallet": {
+            "type_id": "TEST",
+            "length_mm": 1200,
+            "width_mm": 800,
+            "max_height_mm": 400,
+            "max_weight_kg": 1000.0,
+        },
+        "boxes": [
+            {
+                "sku_id": "BASE",
+                "description": "Base support",
+                "length_mm": 600,
+                "width_mm": 400,
+                "height_mm": 200,
+                "weight_kg": 15.0,
+                "quantity": 2,
+                "strict_upright": False,
+                "fragile": False,
+                "stackable": True,
+            },
+            {
+                "sku_id": "FRAGILE",
+                "description": "Heavy fragile box",
+                "length_mm": 300,
+                "width_mm": 400,
+                "height_mm": 200,
+                "weight_kg": 3.0,
+                "quantity": 8,
+                "strict_upright": False,
+                "fragile": True,
+                "stackable": True,
+            },
+            {
+                "sku_id": "FILL",
+                "description": "Light filler",
+                "length_mm": 300,
+                "width_mm": 200,
+                "height_mm": 200,
+                "weight_kg": 1.5,
+                "quantity": 4,
+                "strict_upright": False,
+                "fragile": False,
+                "stackable": True,
+            },
+        ],
+    }
+    fragile_mix_fp = compute_request_fingerprint(fragile_mix_request)
+    fragile_mix_run = PolicyRun(
+        name="heavy_base",
+        placements=[object()] * 13,
+        remaining=[],
+        block_steps=[],
+        score=0.0,
+        elapsed_ms=0,
+        seed_family="heavy_base",
+        ordered_skus=tuple(box["sku_id"] for box in fragile_mix_request["boxes"]),
+    )
+    assert (
+        _should_try_strict_fragility_search(
+            fragile_mix_request,
+            fragile_mix_fp,
+            fragile_mix_run,
+        )
+        is True
+    )
+
+    tower_request = generate_scenario("test_tower", "fragile_tower", seed=43)
+    tower_fp = compute_request_fingerprint(tower_request)
+    tower_run = PolicyRun(
+        name="fragile_density",
+        placements=[object()] * 21,
+        remaining=[],
+        block_steps=[],
+        score=0.0,
+        elapsed_ms=0,
+        seed_family="fragile_density",
+        ordered_skus=tuple(box["sku_id"] for box in tower_request["boxes"]),
+    )
+    assert _should_try_strict_fragility_search(tower_request, tower_fp, tower_run) is False

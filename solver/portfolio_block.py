@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import itertools
 import logging
 import math
 import time
@@ -198,6 +199,7 @@ def solve_request(
         elapsed_so_far = int((time.perf_counter() - t0) * 1000)
         budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
         if budget_left > 25:
+            order_search_base = best_greedy
             improved = _local_order_search(
                 request=request,
                 run=best_greedy,
@@ -207,6 +209,28 @@ def solve_request(
             )
             if _run_sort_key(improved) > _run_sort_key(best_greedy):
                 runs.append(improved)
+                order_search_base = improved
+
+            elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+            strict_budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
+            if (
+                strict_budget_left > 25
+                and _should_try_strict_fragility_search(
+                    request=request,
+                    fingerprint=fingerprint,
+                    run=order_search_base,
+                )
+            ):
+                strict_improved = _local_order_search(
+                    request=request,
+                    run=order_search_base,
+                    checker=checker,
+                    candidate_gen=candidate_gen,
+                    budget_ms=min(max(80, order_budget_ms), strict_budget_left),
+                    strict_fragility=True,
+                )
+                if _run_sort_key(strict_improved) > _run_sort_key(order_search_base):
+                    runs.append(strict_improved)
 
     enable_repair = fingerprint.total_items <= 120 and not repeat_heavy
     best_two = sorted(runs, key=_run_sort_key, reverse=True)[:2]
@@ -656,6 +680,7 @@ def _run_greedy_seed_family(
     budget_ms: int,
     ordered_boxes: Optional[List[Box]] = None,
     apply_postprocess: bool = True,
+    strict_fragility: bool = False,
 ) -> PolicyRun:
     t0 = time.perf_counter()
     task_id, pallet, boxes = _request_to_models(request)
@@ -663,16 +688,19 @@ def _run_greedy_seed_family(
     allow_staged_variant = ordered_boxes is None
     if ordered_boxes is None:
         ordered_boxes = _ordered_boxes_for_seed(boxes, seed_family)
+    run_name = f"{seed_family}:strict" if strict_fragility else seed_family
+    label = f"{seed_family}:strict" if strict_fragility else seed_family
     base_run = _policy_run_from_solution(
         request=request,
         solution=pack_ordered_boxes(
             task_id,
             pallet,
             ordered_boxes,
-            label=seed_family,
+            label=label,
+            strict_fragility=strict_fragility,
         ),
         total_items=total_items,
-        name=seed_family,
+        name=run_name,
         seed_family=seed_family,
         ordered_skus=tuple(box.sku_id for box in ordered_boxes),
     )
@@ -687,10 +715,11 @@ def _run_greedy_seed_family(
                         task_id,
                         pallet,
                         staged_instances,
-                        label=f"{seed_family}:staged",
+                        label=f"{label}:staged",
+                        strict_fragility=strict_fragility,
                     ),
                     total_items=total_items,
-                    name=f"{seed_family}:staged",
+                    name=f"{run_name}:staged",
                     seed_family=seed_family,
                     ordered_skus=(),
                 )
@@ -707,7 +736,7 @@ def _run_greedy_seed_family(
             time_budget_left_ms=post_budget_ms,
         )
         run.seed_family = seed_family
-        if run.name == f"{seed_family}:staged" or run.name.startswith(f"{seed_family}:staged+"):
+        if run.name == f"{run_name}:staged" or run.name.startswith(f"{run_name}:staged+"):
             run.ordered_skus = ()
         elif not run.ordered_skus:
             run.ordered_skus = tuple(box.sku_id for box in ordered_boxes)
@@ -805,6 +834,7 @@ def _local_order_search(
     checker: FeasibilityChecker,
     candidate_gen: CandidateGenerator,
     budget_ms: int,
+    strict_fragility: bool = False,
 ) -> PolicyRun:
     if budget_ms <= 0 or not run.ordered_skus:
         return run
@@ -820,8 +850,27 @@ def _local_order_search(
     deadline = time.perf_counter() + budget_ms / 1000.0
     best_run = run
     best_raw_run = run
-    neighbors = _generate_order_neighbors(current_order, top_n)
+    neighbors: List[List[Box]]
+    exact_search = len(current_order) <= 3
+    if exact_search:
+        neighbors = _generate_exact_orderings(current_order)
+    else:
+        neighbors = _generate_order_neighbors(current_order, top_n)
     raw_runs: List[PolicyRun] = []
+    if strict_fragility:
+        strict_base = _run_greedy_seed_family(
+            request=request,
+            seed_family=run.seed_family or "mixed_volume",
+            checker=checker,
+            candidate_gen=candidate_gen,
+            budget_ms=0,
+            ordered_boxes=current_order,
+            apply_postprocess=False,
+            strict_fragility=True,
+        )
+        raw_runs.append(strict_base)
+        best_raw_run = strict_base
+        best_run = strict_base
     for neighbor in neighbors:
         if time.perf_counter() >= deadline:
             break
@@ -833,6 +882,7 @@ def _local_order_search(
             budget_ms=0,
             ordered_boxes=neighbor,
             apply_postprocess=False,
+            strict_fragility=strict_fragility,
         )
         raw_runs.append(candidate)
         if _run_sort_key(candidate) > _run_sort_key(best_raw_run):
@@ -844,7 +894,10 @@ def _local_order_search(
         return best_raw_run
 
     raw_runs.sort(key=_run_sort_key, reverse=True)
-    shortlist_k = 1 if total_items >= 60 and len(current_order) <= 4 else 3
+    if exact_search:
+        shortlist_k = len(raw_runs)
+    else:
+        shortlist_k = 1 if total_items >= 60 and len(current_order) <= 4 else 3
     best_run = run
     for candidate in raw_runs[:shortlist_k]:
         if time.perf_counter() >= deadline:
@@ -858,12 +911,28 @@ def _local_order_search(
             budget_ms=max(0, int((deadline - time.perf_counter()) * 1000)),
             ordered_boxes=ordered_boxes,
             apply_postprocess=True,
+            strict_fragility=strict_fragility,
         )
         if _run_sort_key(candidate) > _run_sort_key(best_run):
             best_run = candidate
     if _run_sort_key(best_raw_run) > _run_sort_key(best_run):
         return best_raw_run
     return best_run
+
+
+def _generate_exact_orderings(
+    ordered_boxes: Sequence[Box],
+) -> List[List[Box]]:
+    seen = set()
+    current = tuple(box.sku_id for box in ordered_boxes)
+    neighbors: List[List[Box]] = []
+    for permutation in itertools.permutations(ordered_boxes):
+        key = tuple(box.sku_id for box in permutation)
+        if key == current or key in seen:
+            continue
+        seen.add(key)
+        neighbors.append(list(permutation))
+    return neighbors
 
 
 def _generate_order_neighbors(
@@ -898,6 +967,33 @@ def _generate_order_neighbors(
             seen.add(key)
             neighbors.append(adjacent + suffix)
     return neighbors
+
+
+def _should_try_strict_fragility_search(
+    request: Dict[str, Any],
+    fingerprint: ScenarioFingerprint,
+    run: PolicyRun,
+) -> bool:
+    if not run.ordered_skus:
+        return False
+    if (
+        fingerprint.sku_count > 4
+        or fingerprint.total_items > 70
+        or fingerprint.volume_ratio > 1.05
+    ):
+        return False
+
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    coverage = len(run.placements) / max(total_items, 1)
+    if coverage < 0.85:
+        return False
+
+    has_heavy_fragile = any(
+        box.get("fragile", False) and box["weight_kg"] > FRAGILE_WEIGHT_THRESHOLD
+        for box in request["boxes"]
+    )
+    has_non_fragile = any(not box.get("fragile", False) for box in request["boxes"])
+    return has_heavy_fragile and has_non_fragile
 
 
 def _repair_candidate_run(

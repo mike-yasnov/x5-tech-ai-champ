@@ -78,6 +78,7 @@ def _pack_instances(
     pallet: Pallet,
     instances: List[Tuple[Box, int]],
     sort_label: str,
+    strict_fragility: bool = False,
 ) -> Solution:
     t0 = time.perf_counter()
 
@@ -108,6 +109,7 @@ def _pack_instances(
                 sc = score_placement(
                     state, dx, dy, dz, ex, ey, ez,
                     box.weight_kg, box.fragile,
+                    strict_fragility=strict_fragility,
                 )
                 if sc > best_score:
                     best_score = sc
@@ -164,9 +166,16 @@ def pack_ordered_boxes(
     pallet: Pallet,
     boxes: List[Box],
     label: str = "custom_order",
+    strict_fragility: bool = False,
 ) -> Solution:
     instances = _expand_boxes(boxes)
-    return _pack_instances(task_id, pallet, instances, label)
+    return _pack_instances(
+        task_id,
+        pallet,
+        instances,
+        label,
+        strict_fragility=strict_fragility,
+    )
 
 
 def pack_instance_sequence(
@@ -174,8 +183,15 @@ def pack_instance_sequence(
     pallet: Pallet,
     instances: List[Tuple[Box, int]],
     label: str = "custom_sequence",
+    strict_fragility: bool = False,
 ) -> Solution:
-    return _pack_instances(task_id, pallet, instances, label)
+    return _pack_instances(
+        task_id,
+        pallet,
+        instances,
+        label,
+        strict_fragility=strict_fragility,
+    )
 
 
 # ── Greedy packer ───────────────────────────────────────────────────
@@ -185,10 +201,17 @@ def pack_greedy(
     pallet: Pallet,
     boxes: List[Box],
     sort_key_name: str = "volume_desc",
+    strict_fragility: bool = False,
 ) -> Solution:
     """Pack boxes greedily using Extreme Points + scoring function.
 
     Returns a Solution with placements and unplaced items.
     """
     sorted_boxes = order_boxes(boxes, sort_key_name=sort_key_name)
-    return pack_ordered_boxes(task_id, pallet, sorted_boxes, label=sort_key_name)
+    return pack_ordered_boxes(
+        task_id,
+        pallet,
+        sorted_boxes,
+        label=sort_key_name,
+        strict_fragility=strict_fragility,
+    )

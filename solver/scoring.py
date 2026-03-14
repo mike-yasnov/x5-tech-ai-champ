@@ -18,6 +18,7 @@ def score_placement(
     x: int, y: int, z: int,
     weight_kg: float,
     fragile: bool,
+    strict_fragility: bool = False,
 ) -> float:
     """Score a candidate placement. Higher = better.
 
@@ -44,6 +45,8 @@ def score_placement(
     if weight_kg > 2.0 and z > 0:
         fragile_below = state.get_fragile_boxes_at_top(z, x, y, x2, y2)
         if fragile_below:
+            if strict_fragility:
+                return -10.0
             fragility_score = 0.0
 
     # 4. Fill bonus: prefer positions with lower z (fill gaps first)
