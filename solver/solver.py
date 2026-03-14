@@ -293,7 +293,8 @@ def solve(
             ("score_per_kg", "default", "greedy"),
             ("light_fillers_first", "default", "greedy"),
         ])
-    # Fragile-aware strategies are already in core list at positions 10-12
+    # Fragile-strict strategies are already in core list (positions 10-12)
+    # The hard-block in scoring.py makes them more effective automatically
 
     strategies = adaptive_head + [
         # Core greedy strategies with default weights
