@@ -154,6 +154,7 @@ def solve_request(
     )
     t0 = time.perf_counter()
     proxy_upper_bound = _proxy_upper_bound(request)
+    repeat_heavy = fingerprint.total_items >= 60 and fingerprint.sku_count <= 4
 
     seed_limit_ms = min(220, max(120, time_budget_ms // 4))
     order_budget_ms = max(80, min(260, time_budget_ms // 4))
@@ -161,8 +162,9 @@ def solve_request(
 
     ranked_families = _rank_seed_families(fingerprint, selector)
     runs: List[PolicyRun] = []
+    seed_eval_count = 2 if repeat_heavy else 3
 
-    for seed_family in ranked_families[:3]:
+    for seed_family in ranked_families[:seed_eval_count]:
         elapsed_so_far = int((time.perf_counter() - t0) * 1000)
         budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
         if budget_left <= 20:
@@ -206,7 +208,7 @@ def solve_request(
             if _run_sort_key(improved) > _run_sort_key(best_greedy):
                 runs.append(improved)
 
-    enable_repair = fingerprint.total_items <= 120
+    enable_repair = fingerprint.total_items <= 120 and not repeat_heavy
     best_two = sorted(runs, key=_run_sort_key, reverse=True)[:2]
     if best_two and enable_repair:
         per_run_repair_ms = max(35, repair_budget_ms // len(best_two))
@@ -727,10 +729,13 @@ def _local_order_search(
     if top_n < 2:
         return run
 
+    total_items = sum(box["quantity"] for box in request["boxes"])
     deadline = time.perf_counter() + budget_ms / 1000.0
     best_run = run
+    best_raw_run = run
     neighbors = _generate_order_neighbors(current_order, top_n)
-    for idx, neighbor in enumerate(neighbors):
+    raw_runs: List[PolicyRun] = []
+    for neighbor in neighbors:
         if time.perf_counter() >= deadline:
             break
         candidate = _run_greedy_seed_family(
@@ -738,12 +743,39 @@ def _local_order_search(
             seed_family=run.seed_family or "mixed_volume",
             checker=checker,
             candidate_gen=candidate_gen,
-            budget_ms=max(0, int((deadline - time.perf_counter()) * 1000 // max(1, len(neighbors) - idx))),
+            budget_ms=0,
             ordered_boxes=neighbor,
+            apply_postprocess=False,
+        )
+        raw_runs.append(candidate)
+        if _run_sort_key(candidate) > _run_sort_key(best_raw_run):
+            best_raw_run = candidate
+
+    if not raw_runs:
+        return run
+    if time.perf_counter() >= deadline:
+        return best_raw_run
+
+    raw_runs.sort(key=_run_sort_key, reverse=True)
+    shortlist_k = 1 if total_items >= 60 and len(current_order) <= 4 else 3
+    best_run = run
+    for candidate in raw_runs[:shortlist_k]:
+        if time.perf_counter() >= deadline:
+            break
+        ordered_boxes = [by_sku[sku_id] for sku_id in candidate.ordered_skus if sku_id in by_sku]
+        candidate = _run_greedy_seed_family(
+            request=request,
+            seed_family=run.seed_family or "mixed_volume",
+            checker=checker,
+            candidate_gen=candidate_gen,
+            budget_ms=max(0, int((deadline - time.perf_counter()) * 1000)),
+            ordered_boxes=ordered_boxes,
             apply_postprocess=True,
         )
         if _run_sort_key(candidate) > _run_sort_key(best_run):
             best_run = candidate
+    if _run_sort_key(best_raw_run) > _run_sort_key(best_run):
+        return best_raw_run
     return best_run
 
 
