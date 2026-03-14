@@ -65,7 +65,7 @@ def run_benchmark(n_restarts: int = 10) -> list:
             boxes=boxes,
             request_dict=request_dict,
             n_restarts=n_restarts,
-            time_budget_ms=5000,
+            time_budget_ms=900,
         )
         wall_time_ms = int((time.perf_counter() - t0) * 1000)
 
