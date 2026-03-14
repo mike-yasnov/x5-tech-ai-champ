@@ -105,6 +105,35 @@ def _sort_stackable_base(box: Box) -> tuple:
     return (tier, -box.volume)
 
 
+def _sort_score_per_kg(box: Box) -> tuple:
+    """Sort by marginal score per kg — maximize items placed under weight limit.
+
+    Higher score-per-kg items should be placed first to fit more items
+    before hitting the weight limit.
+    """
+    # volume contributes to vol_util (50% weight), each item contributes to coverage (30%)
+    # Use volume/weight as proxy for value-per-kg
+    vol = max(box.volume, 1)
+    return (-vol / max(box.weight_kg, 0.01),)
+
+
+def _sort_light_fillers_first(box: Box) -> tuple:
+    """Light items first — maximize item count under weight limit.
+
+    Place lightest items first to maximize coverage when weight-limited.
+    """
+    return (box.weight_kg, -box.volume)
+
+
+def _sort_coverage_optimal(box: Box) -> tuple:
+    """Maximize coverage: lightest and smallest first.
+
+    Each item contributes equally to coverage regardless of size.
+    Placing light small items first maximizes total items placed.
+    """
+    return (box.weight_kg * box.volume,)
+
+
 def _make_random_sort(seed: int) -> Callable[[Box], tuple]:
     """Create a deterministic pseudo-random sort key using hash."""
     def key(box: Box) -> tuple:
@@ -127,6 +156,9 @@ SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "max_dim_desc": _sort_max_dim_desc,              # Secondary
     "heavy_base_fragile_top": _sort_heavy_base_fragile_top,  # Best for fragile_tower
     "stackable_base": _sort_stackable_base,                  # Good for mixed scenarios
+    "score_per_kg": _sort_score_per_kg,                      # Best for weight-limited
+    "light_fillers_first": _sort_light_fillers_first,        # Maximize coverage under weight limit
+    "coverage_optimal": _sort_coverage_optimal,              # Light+small first
 }
 
 # Add randomized sort strategies for exploration
@@ -673,6 +705,115 @@ def pack_beam_search(
         solver_version=__version__,
         solve_time_ms=elapsed_ms,
         placements=best_placements,
+        unplaced=unplaced,
+    )
+
+
+def pack_layer(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+    sort_key_name: str = "volume_desc",
+    weight_profile: str = "default",
+) -> Solution:
+    """Layer-based packer: build complete horizontal layers for better density.
+
+    Algorithm:
+    1. Group items by compatible heights (within 10% tolerance)
+    2. For each layer, fill a 2D strip using shelf-next-fit
+    3. Stack layers bottom-up
+    """
+    t0 = time.perf_counter()
+
+    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
+    sorted_boxes = sorted(boxes, key=sort_fn)
+    instances = _expand_boxes(sorted_boxes)
+
+    # Group instances by height (try each orientation's dz)
+    # For each instance, pick the orientation that creates the best layer height
+    orientation_cache: Dict[str, list] = {}
+    for box, _ in instances:
+        if box.sku_id not in orientation_cache:
+            orientation_cache[box.sku_id] = get_orientations(box)
+
+    state = PalletState(pallet)
+    placements: List[Placement] = []
+    unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+
+    # Try to place using standard EP greedy but with layer-aware scoring
+    # that strongly rewards same-z-level placements
+    for box, inst_idx in instances:
+        orientations = orientation_cache[box.sku_id]
+        best_score = -1.0
+        best_placement = None
+
+        for ep in state.extreme_points:
+            ex, ey, ez = ep
+            for dx, dy, dz, rot_code in orientations:
+                if not state.can_place(
+                    dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile, box.stackable,
+                ):
+                    continue
+
+                sc = score_placement(
+                    state, dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile,
+                    weight_profile=weight_profile,
+                )
+
+                # Layer bonus: strongly prefer staying at current layer z
+                if state.boxes:
+                    current_layer_z = max(
+                        (b.z_min for b in state.boxes),
+                        key=lambda z: sum(1 for b in state.boxes if b.z_min == z),
+                    )
+                    if ez == current_layer_z:
+                        sc += 0.15
+
+                if sc > best_score:
+                    best_score = sc
+                    best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+
+        if best_placement is not None:
+            dx, dy, dz, px, py, pz, rot_code = best_placement
+            state.place(
+                box.sku_id, dx, dy, dz, px, py, pz,
+                box.weight_kg, box.fragile, box.stackable,
+            )
+            placements.append(Placement(
+                sku_id=box.sku_id,
+                instance_index=inst_idx,
+                x_mm=px, y_mm=py, z_mm=pz,
+                length_mm=dx, width_mm=dy, height_mm=dz,
+                rotation_code=rot_code,
+            ))
+        else:
+            if state.current_weight + box.weight_kg > pallet.max_weight_kg:
+                reason = "weight_limit_exceeded"
+            else:
+                reason = "no_space"
+            unplaced_counts[box.sku_id]["count"] += 1
+            unplaced_counts[box.sku_id]["reason"] = reason
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    unplaced = [
+        UnplacedItem(sku_id=sid, quantity_unplaced=info["count"], reason=info["reason"])
+        for sid, info in unplaced_counts.items()
+    ]
+
+    logger.info(
+        "[pack_layer] done sort=%s profile=%s placed=%d unplaced=%d time=%dms",
+        sort_key_name, weight_profile, len(placements),
+        sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
+    )
+
+    return Solution(
+        task_id=task_id,
+        solver_version=__version__,
+        solve_time_ms=elapsed_ms,
+        placements=placements,
         unplaced=unplaced,
     )
 

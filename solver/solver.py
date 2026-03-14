@@ -8,7 +8,7 @@ from collections import defaultdict
 from typing import List, Optional, Tuple
 
 from .models import Box, Pallet, Solution, solution_to_dict
-from .packer import SORT_KEYS, pack_greedy, pack_greedy_with_order, pack_two_phase, pack_beam_search, pack_bestfit, MAX_BESTFIT_ITEMS
+from .packer import SORT_KEYS, pack_greedy, pack_greedy_with_order, pack_two_phase, pack_beam_search, pack_bestfit, pack_layer, MAX_BESTFIT_ITEMS
 from .pallet_state import _overlap_area
 
 # Add project root to path for validator import
@@ -100,6 +100,9 @@ def _run_strategy(args: tuple) -> Tuple[float, Solution, str, str, str, float]:
     if packer_type == "two_phase":
         solution = pack_two_phase(task_id, pallet, boxes, sort_key_name=key_name,
                                   weight_profile=weight_profile)
+    elif packer_type == "layer":
+        solution = pack_layer(task_id, pallet, boxes, sort_key_name=key_name,
+                              weight_profile=weight_profile)
     elif packer_type.startswith("beam"):
         beam_width = int(packer_type.split("_")[1]) if "_" in packer_type else 4
         solution = pack_beam_search(task_id, pallet, boxes, sort_key_name=key_name,
@@ -139,6 +142,9 @@ def _run_strategies_sequential(
         if packer_type == "two_phase":
             solution = pack_two_phase(task_id, pallet, boxes, sort_key_name=key_name,
                                       weight_profile=weight_profile)
+        elif packer_type == "layer":
+            solution = pack_layer(task_id, pallet, boxes, sort_key_name=key_name,
+                                  weight_profile=weight_profile)
         elif packer_type.startswith("beam"):
             beam_width = int(packer_type.split("_")[1]) if "_" in packer_type else 4
             solution = pack_beam_search(task_id, pallet, boxes, sort_key_name=key_name,
@@ -264,9 +270,32 @@ def solve(
 
     sort_key_names = list(SORT_KEYS.keys())
 
+    # Analyze task properties for adaptive strategy selection
+    total_items = sum(b.quantity for b in boxes)
+    total_weight = sum(b.weight_kg * b.quantity for b in boxes)
+    total_volume = sum(b.volume * b.quantity for b in boxes)
+    fragile_items = sum(b.quantity for b in boxes if b.fragile)
+    fragile_ratio = fragile_items / max(total_items, 1)
+    weight_pressure = total_weight / max(pallet.max_weight_kg, 1)
+
+    logger.info(
+        "[solve] task_analysis: fragile_ratio=%.2f weight_pressure=%.2f vol_ratio=%.2f",
+        fragile_ratio, weight_pressure, total_volume / max(pallet.volume, 1),
+    )
+
     # Build strategy list: (sort_key, weight_profile, packer_type) triples
     from .scoring import WEIGHT_PROFILES
-    strategies = [
+
+    # Adaptive prepend: add high-value strategies based on task properties
+    adaptive_head = []
+    if weight_pressure > 1.3:
+        adaptive_head.extend([
+            ("score_per_kg", "default", "greedy"),
+            ("light_fillers_first", "default", "greedy"),
+        ])
+    # Fragile-aware strategies are already in core list at positions 10-12
+
+    strategies = adaptive_head + [
         # Core greedy strategies with default weights
         (sort_key_names[0], "default", "greedy"),        # constrained_first
         (sort_key_names[1], "default", "greedy"),        # base_area_desc
@@ -279,6 +308,15 @@ def solve(
         (sort_key_names[6], "contact_heavy", "greedy"),  # non_stackable_last + contact → also 84/84
         (sort_key_names[3], "fill_heavy", "greedy"),     # volume_desc + fill
         (sort_key_names[0], "contact_heavy", "greedy"),  # constrained_first + contact
+        # Fragile-strict strategies (moved early for fragile-heavy scenarios)
+        (sort_key_names[2], "fragile_strict", "greedy"),       # fragile_last + fragile_strict
+        ("heavy_base_fragile_top", "fragile_strict", "greedy"),
+        (sort_key_names[2], "fragile_strict", "two_phase"),    # fragile_last + fragile_strict two-phase
+        # Weight-aware strategies for weight-limited scenarios
+        ("score_per_kg", "default", "greedy"),
+        ("score_per_kg", "contact_heavy", "greedy"),
+        ("light_fillers_first", "default", "greedy"),
+        ("coverage_optimal", "default", "greedy"),
         # Two-phase strategies (good for fragile-heavy scenarios)
         (sort_key_names[3], "default", "two_phase"),     # volume_desc two-phase
         (sort_key_names[1], "default", "two_phase"),     # base_area_desc two-phase
@@ -293,7 +331,7 @@ def solve(
         # More alternatives
         (sort_key_names[2], "fill_heavy", "greedy"),
         (sort_key_names[1], "contact_heavy", "two_phase"),
-        # === New profiles (positions 19+, run with 30 restarts) ===
+        # Fragile-avoid strategies
         (sort_key_names[2], "fragile_avoid", "greedy"),       # fragile_last + fragile_avoid
         ("heavy_base_fragile_top", "fragile_avoid", "greedy"),
         (sort_key_names[0], "fragile_avoid", "greedy"),       # constrained_first + fragile_avoid
@@ -305,9 +343,10 @@ def solve(
         ("stackable_base", "fragile_avoid", "greedy"),
         (sort_key_names[0], "compact", "greedy"),
         ("heavy_base_fragile_top", "wall_hugger", "greedy"),
-        # Fragile-strict strategies
-        (sort_key_names[2], "fragile_strict", "greedy"),
-        ("heavy_base_fragile_top", "fragile_strict", "greedy"),
+        # Layer-based strategies (promote flat layer building)
+        (sort_key_names[3], "default", "layer"),        # volume_desc layer
+        (sort_key_names[1], "default", "layer"),        # base_area_desc layer
+        (sort_key_names[0], "contact_heavy", "layer"),  # constrained_first layer
     ]
     # Add remaining random sorts
     for sn in sort_key_names[12:]:
