@@ -37,7 +37,7 @@ def solve(
     pallet: Pallet,
     boxes: List[Box],
     request_dict: dict,
-    n_restarts: int = 10,
+    n_restarts: int = 20,
     time_budget_ms: int = 900,
 ) -> Solution:
     """Run greedy packer with multiple sort strategies and return the best solution.

@@ -43,12 +43,44 @@ def _sort_constrained_first(box: Box) -> tuple:
     return (priority, -box.volume)
 
 
+def _sort_volume_asc(box: Box) -> tuple:
+    return (box.volume,)
+
+
+def _sort_height_desc(box: Box) -> tuple:
+    return (-box.height_mm,)
+
+
+def _sort_fragile_last(box: Box) -> tuple:
+    # Non-fragile stackable first (heavy base), fragile and non-stackable last
+    penalty = 0
+    if box.fragile:
+        penalty += 2
+    if not box.stackable:
+        penalty += 1
+    return (penalty, -box.volume)
+
+
+def _sort_non_stackable_last(box: Box) -> tuple:
+    # Non-stackable items last (they block stacking), then by volume desc
+    return (0 if box.stackable else 1, -box.volume)
+
+
+def _sort_max_dim_desc(box: Box) -> tuple:
+    return (-max(box.length_mm, box.width_mm, box.height_mm),)
+
+
 SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "volume_desc": _sort_volume_desc,
     "weight_desc": _sort_weight_desc,
     "base_area_desc": _sort_base_area_desc,
     "density_desc": _sort_density_desc,
     "constrained_first": _sort_constrained_first,
+    "volume_asc": _sort_volume_asc,
+    "height_desc": _sort_height_desc,
+    "fragile_last": _sort_fragile_last,
+    "non_stackable_last": _sort_non_stackable_last,
+    "max_dim_desc": _sort_max_dim_desc,
 }
 
 

@@ -39,12 +39,12 @@ def score_placement(
     surface_area = 2 * (dx * dy + dy * dz + dx * dz)
     contact_score = min(1.0, contact / surface_area) if surface_area > 0 else 0.0
 
-    # 3. Fragility penalty: check if we're placing heavy box on fragile ones
+    # 3. Fragility penalty: hard block placing heavy box on fragile ones
     fragility_score = 1.0
     if weight_kg > 2.0 and z > 0:
         fragile_below = state.get_fragile_boxes_at_top(z, x, y, x2, y2)
         if fragile_below:
-            fragility_score = 0.0
+            return -1.0  # Hard block: never place heavy on fragile
 
     # 4. Fill bonus: prefer positions with lower z (fill gaps first)
     fill_score = 1.0 - (z / max_h) if max_h > 0 else 0.0
