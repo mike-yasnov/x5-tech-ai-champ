@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, server]
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -33,7 +33,7 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   benchmark:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, server]
     needs: test
     if: github.event_name == 'pull_request'
     permissions:
