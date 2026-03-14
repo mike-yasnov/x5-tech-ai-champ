@@ -31,6 +31,7 @@ PROJECT_SCENARIOS = [
     ("fragile_mix", 47),
     ("support_tetris", 48),
     ("cavity_fill", 49),
+    ("count_preference", 50),
 ]
 
 SCENARIOS = ORGANIZER_SCENARIOS + PROJECT_SCENARIOS
@@ -178,34 +179,44 @@ def build_viz_data(results: list) -> list:
             sku = boxes_meta.get(p["sku_id"], {})
             dim = p["dimensions_placed"]
             pos = p["position"]
-            placements.append({
-                "sku_id": p["sku_id"],
-                "x_mm": pos["x_mm"],
-                "y_mm": pos["y_mm"],
-                "z_mm": pos["z_mm"],
-                "length_mm": dim["length_mm"],
-                "width_mm": dim["width_mm"],
-                "height_mm": dim["height_mm"],
-                "fragile": sku.get("fragile", False),
-            })
-        viz.append({
-            "pallet": r.get("request_pallet", {}),
-            "placements": placements,
-            "meta": {
-                "scenario": r["scenario"],
-                "score": r.get("final_score", 0),
-                "placed": r.get("placed", 0),
-                "total_items": r.get("total_items", 0),
-            },
-        })
+            placements.append(
+                {
+                    "sku_id": p["sku_id"],
+                    "x_mm": pos["x_mm"],
+                    "y_mm": pos["y_mm"],
+                    "z_mm": pos["z_mm"],
+                    "length_mm": dim["length_mm"],
+                    "width_mm": dim["width_mm"],
+                    "height_mm": dim["height_mm"],
+                    "fragile": sku.get("fragile", False),
+                }
+            )
+        viz.append(
+            {
+                "pallet": r.get("request_pallet", {}),
+                "placements": placements,
+                "meta": {
+                    "scenario": r["scenario"],
+                    "score": r.get("final_score", 0),
+                    "placed": r.get("placed", 0),
+                    "total_items": r.get("total_items", 0),
+                },
+            }
+        )
     return viz
 
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark 3D Pallet Packing Solver")
-    parser.add_argument("--restarts", type=int, default=10, help="Number of restarts (default: 10)")
-    parser.add_argument("--output", "-o", default=None, help="Save detailed results to JSON file")
-    parser.add_argument("--viz", default=None, help="Generate 3D visualization HTML files to directory")
+    parser.add_argument(
+        "--restarts", type=int, default=10, help="Number of restarts (default: 10)"
+    )
+    parser.add_argument(
+        "--output", "-o", default=None, help="Save detailed results to JSON file"
+    )
+    parser.add_argument(
+        "--viz", default=None, help="Generate 3D visualization HTML files to directory"
+    )
     args = parser.parse_args()
 
     results = run_benchmark(n_restarts=args.restarts)
@@ -215,7 +226,11 @@ def main():
     if args.output:
         # Save results without bulky response/request data
         slim_results = [
-            {k: v for k, v in r.items() if k not in ("response", "request_pallet", "request_boxes")}
+            {
+                k: v
+                for k, v in r.items()
+                if k not in ("response", "request_pallet", "request_boxes")
+            }
             for r in results
         ]
         with open(args.output, "w", encoding="utf-8") as f:
@@ -224,6 +239,7 @@ def main():
 
     if args.viz:
         from visualize import generate_html_files
+
         viz_data = build_viz_data(results)
         viz_json_path = os.path.join(args.viz, "benchmark_viz.json")
         os.makedirs(args.viz, exist_ok=True)
