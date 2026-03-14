@@ -65,7 +65,11 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
+def run_benchmark(
+    n_restarts: int = 10,
+    time_budget_ms: int = 5000,
+    strategy: str = "portfolio_block",
+) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
@@ -84,6 +88,7 @@ def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
             request_dict=request_dict,
             n_restarts=n_restarts,
             time_budget_ms=time_budget_ms,
+            strategy=strategy,
         )
         wall_time_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -101,6 +106,7 @@ def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
             "total_items": total_items,
             "solve_time_ms": solution.solve_time_ms,
             "wall_time_ms": wall_time_ms,
+            "strategy": strategy,
             "error": eval_result.get("error"),
             "response": response_dict,
             "request_pallet": request_dict["pallet"],
@@ -218,9 +224,15 @@ def main():
     parser.add_argument(
         "--viz", default=None, help="Generate 3D visualization HTML files to directory"
     )
+    parser.add_argument(
+        "--strategy",
+        default="portfolio_block",
+        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy"],
+        help="Runtime strategy to benchmark",
+    )
     args = parser.parse_args()
 
-    results = run_benchmark(n_restarts=args.restarts)
+    results = run_benchmark(n_restarts=args.restarts, strategy=args.strategy)
     md = format_markdown(results)
     print(md)
 

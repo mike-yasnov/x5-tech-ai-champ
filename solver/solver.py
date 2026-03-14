@@ -1,4 +1,4 @@
-"""Public solver entrypoint backed by the hybrid `sol/` method."""
+"""Public solver entrypoint with strategy dispatch."""
 
 from __future__ import annotations
 
@@ -6,11 +6,17 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from . import __version__
-from .hybrid import solve_request
+from .hybrid import solve_request as solve_hybrid_request
 from .models import Box, Pallet, Placement, Solution, UnplacedItem
+from .portfolio_block import (
+    solve_legacy_greedy_request,
+    solve_request as solve_portfolio_request,
+)
 
 
 logger = logging.getLogger(__name__)
+
+STRATEGIES = ("portfolio_block", "legacy_hybrid", "legacy_greedy")
 
 
 def _legacy_effort_to_beam_width(n_restarts: int) -> int:
@@ -89,8 +95,9 @@ def solve(
     time_budget_ms: int = 900,
     beam_width: Optional[int] = None,
     model_dir: str = "models",
+    strategy: str = "portfolio_block",
 ) -> Solution:
-    """Solve using the convention-preserving hybrid adapter.
+    """Solve using the configured runtime strategy.
 
     `n_restarts` is kept as a legacy public knob and now maps to search effort.
     """
@@ -98,6 +105,8 @@ def solve(
         task_id, pallet, boxes
     )
     request["task_id"] = task_id
+    if strategy not in STRATEGIES:
+        raise ValueError(f"Unknown strategy: {strategy}")
 
     effective_beam = (
         max(1, beam_width)
@@ -107,8 +116,9 @@ def solve(
     max_expansions = max(2, min(5, effective_beam))
 
     logger.info(
-        "[solve] task=%s legacy_effort=%d beam_width=%d max_expansions=%d budget=%dms model_dir=%s",
+        "[solve] task=%s strategy=%s legacy_effort=%d beam_width=%d max_expansions=%d budget=%dms model_dir=%s",
         task_id,
+        strategy,
         n_restarts,
         effective_beam,
         max_expansions,
@@ -116,13 +126,25 @@ def solve(
         model_dir,
     )
 
-    response = solve_request(
-        request=request,
-        model_dir=model_dir,
-        beam_width=effective_beam,
-        max_expansions=max_expansions,
-        time_budget_ms=time_budget_ms,
-    )
+    if strategy == "portfolio_block":
+        response = solve_portfolio_request(
+            request=request,
+            model_dir=model_dir,
+            time_budget_ms=time_budget_ms,
+        )
+    elif strategy == "legacy_hybrid":
+        response = solve_hybrid_request(
+            request=request,
+            model_dir=model_dir,
+            beam_width=effective_beam,
+            max_expansions=max_expansions,
+            time_budget_ms=time_budget_ms,
+        )
+    else:
+        response = solve_legacy_greedy_request(
+            request=request,
+            time_budget_ms=time_budget_ms,
+        )
 
     solution = _solution_from_response(response)
     solution.task_id = task_id

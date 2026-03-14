@@ -1,0 +1,1214 @@
+from __future__ import annotations
+
+import logging
+import math
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+import numpy as np
+
+from .block_features import BlockFeatureExtractor, BlockFeatureView
+from .block_ranker import BlockRanker, normalize_scores
+from .hybrid.candidate_gen import CandidateGenerator, RemainingItem
+from .hybrid.constants import EPSILON, FRAGILE_WEIGHT_THRESHOLD, UNPLACED_REASONS
+from .hybrid.feasibility import FeasibilityChecker
+from .hybrid.free_space import ExtremePointManager
+from .hybrid.geometry import AABB
+from .hybrid.pallet_state import PalletState, PlacedBox
+from .hybrid.postprocess import postprocess
+from .hybrid.rotations import get_orientations
+from .models import Box, Pallet
+from .packer import pack_greedy
+
+
+logger = logging.getLogger(__name__)
+
+SOLVER_VERSION = "portfolio-block-v0.1"
+CONSTRUCTIVE_POLICIES = ("foundation", "fragile_last", "coverage_fill")
+LEGACY_PORTFOLIO_SORTS = (
+    "constrained_first",
+    "base_area_desc",
+    "volume_desc",
+    "density_desc",
+)
+
+
+@dataclass(frozen=True)
+class BlockCandidate:
+    sku_id: str
+    rotation_code: str
+    placed_dims: Tuple[int, int, int]
+    nx: int
+    ny: int
+    nz: int
+    item_count: int
+    total_weight: float
+    fragile: bool
+    stackable: bool
+    strict_upright: bool
+    aabb: AABB
+    units: Tuple[PlacedBox, ...]
+    support_ratio: float
+    wall_count: int
+    corner_touch: bool
+    heuristic_score: float
+
+    def feature_view(self, state: PalletState) -> BlockFeatureView:
+        unit_volume = (
+            self.placed_dims[0] * self.placed_dims[1] * self.placed_dims[2]
+        )
+        return BlockFeatureView(
+            item_count=self.item_count,
+            nx=self.nx,
+            ny=self.ny,
+            nz=self.nz,
+            block_length=self.aabb.length_x(),
+            block_width=self.aabb.width_y(),
+            block_height=self.aabb.height_z(),
+            block_weight=self.total_weight,
+            unit_weight=self.total_weight / max(self.item_count, 1),
+            unit_volume=unit_volume,
+            fragile=self.fragile,
+            strict_upright=self.strict_upright,
+            support_ratio=self.support_ratio,
+            wall_count=self.wall_count,
+            corner_touch=self.corner_touch,
+            z_min=self.aabb.z_min,
+            residual_x=state.length - self.aabb.x_max,
+            residual_y=state.width - self.aabb.y_max,
+            remaining_height=state.max_height - self.aabb.z_max,
+            heuristic_score=self.heuristic_score,
+        )
+
+
+@dataclass(frozen=True)
+class BlockStep:
+    candidate: BlockCandidate
+    marginal_gain: float
+    frontier_exposure: float
+
+
+@dataclass
+class PolicyRun:
+    name: str
+    placements: List[PlacedBox]
+    remaining: List[RemainingItem]
+    block_steps: List[BlockStep]
+    score: float
+    elapsed_ms: int
+    used_model: bool = False
+
+
+@dataclass(frozen=True)
+class _BlockSpec:
+    sku_id: str
+    placed_dims: Tuple[int, int, int]
+    rotation_code: str
+    nx: int
+    ny: int
+    nz: int
+    item_count: int
+    total_weight: float
+    fragile: bool
+    stackable: bool
+    strict_upright: bool
+    x: int
+    y: int
+    z: int
+    heuristic_score: float
+
+
+def solve_request(
+    request: Dict[str, Any],
+    model_dir: str | Path = "models",
+    time_budget_ms: int = 900,
+) -> Dict[str, Any]:
+    t0 = time.perf_counter()
+    pallet = request["pallet"]
+    boxes = request["boxes"]
+    total_items = sum(box["quantity"] for box in boxes)
+
+    checker, candidate_gen, _ = _init_common_components(request)
+    ranker, extractor = _load_optional_ranker(model_dir)
+
+    if total_items > 70:
+        best = _run_legacy_portfolio(
+            request,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            budget_ms=min(time_budget_ms, 600),
+        )
+        placements = _reindex_placements(best.placements)
+        final_state, _ = _rebuild_state(request, placements)
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        return _format_output(
+            request["task_id"],
+            placements,
+            _clone_remaining(best.remaining),
+            boxes,
+            final_state,
+            elapsed_ms,
+        )
+
+    budget = {
+        "foundation": int(time_budget_ms * 0.18),
+        "fragile_last": int(time_budget_ms * 0.15),
+        "coverage_fill": int(time_budget_ms * 0.15),
+        "legacy_portfolio": int(time_budget_ms * 0.13),
+        "repair": int(time_budget_ms * 0.09),
+    }
+
+    runs: List[PolicyRun] = []
+    for policy_name in CONSTRUCTIVE_POLICIES:
+        state, ep_manager, remaining = _fresh_search_state(request)
+        deadline = time.perf_counter() + budget[policy_name] / 1000.0
+        run = _construct_with_policy(
+            request=request,
+            policy_name=policy_name,
+            state=state,
+            ep_manager=ep_manager,
+            remaining=remaining,
+            checker=checker,
+            deadline=deadline,
+            ranker=ranker,
+            extractor=extractor,
+            max_block_span=4,
+        )
+        runs.append(run)
+
+    runs.append(
+        _run_legacy_portfolio(
+            request,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            budget_ms=budget["legacy_portfolio"],
+        )
+    )
+    best = _select_best_run(runs)
+
+    if best.block_steps and budget["repair"] > 0:
+        repaired = _repair_run(
+            request=request,
+            run=best,
+            checker=checker,
+            ranker=ranker,
+            extractor=extractor,
+            budget_ms=budget["repair"],
+        )
+        if _run_sort_key(repaired) > _run_sort_key(best):
+            best = repaired
+
+    if best.name.startswith("legacy_portfolio"):
+        placements = _reindex_placements(best.placements)
+        leftover = _clone_remaining(best.remaining)
+        final_state, _ = _rebuild_state(request, placements)
+    else:
+        fresh_state = PalletState(
+            pallet["length_mm"],
+            pallet["width_mm"],
+            pallet["max_height_mm"],
+            pallet["max_weight_kg"],
+        )
+        placements, leftover = postprocess(
+            _reindex_placements(best.placements),
+            _clone_remaining(best.remaining),
+            fresh_state,
+            checker,
+            ExtremePointManager(pallet["length_mm"], pallet["width_mm"]),
+            candidate_gen,
+        )
+        post_state, _ = _rebuild_state(request, placements)
+        pre_state, _ = _rebuild_state(request, best.placements)
+        if _solution_proxy(post_state, total_items) + 1e-9 < _solution_proxy(pre_state, total_items):
+            placements = _reindex_placements(best.placements)
+            leftover = _clone_remaining(best.remaining)
+            final_state = pre_state
+        else:
+            final_state = post_state
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    return _format_output(
+        request["task_id"],
+        placements,
+        leftover,
+        boxes,
+        final_state,
+        elapsed_ms,
+    )
+
+
+def solve_legacy_greedy_request(
+    request: Dict[str, Any],
+    time_budget_ms: int = 900,
+) -> Dict[str, Any]:
+    _ = time_budget_ms
+    run = _run_legacy_portfolio(request, budget_ms=150)
+    state, _ = _rebuild_state(request, run.placements)
+    return _format_output(
+        request["task_id"],
+        run.placements,
+        run.remaining,
+        request["boxes"],
+        state,
+        run.elapsed_ms,
+    )
+
+
+def collect_ranker_rows(
+    request: Dict[str, Any],
+    top_k: int = 16,
+    finish_budget_ms: int = 80,
+) -> List[dict]:
+    checker, _, _ = _init_common_components(request)
+    state, ep_manager, remaining = _fresh_search_state(request)
+    rows: List[dict] = []
+    group_id = 0
+    policies = ("foundation", "fragile_last", "coverage_fill")
+    extractor = BlockFeatureExtractor()
+    deadline = time.perf_counter() + 1.5
+
+    while time.perf_counter() < deadline:
+        if sum(item.remaining_qty for item in remaining) == 0:
+            break
+        policy_name = policies[group_id % len(policies)]
+        candidates = _generate_block_candidates(
+            state=state,
+            ep_manager=ep_manager,
+            remaining=remaining,
+            checker=checker,
+            policy_name=policy_name,
+            max_block_span=4,
+            max_ep=24,
+            max_candidates=64,
+        )
+        if not candidates:
+            break
+
+        candidates.sort(key=lambda candidate: candidate.heuristic_score, reverse=True)
+        shortlisted = candidates[:top_k]
+        views = [candidate.feature_view(state) for candidate in shortlisted]
+        X = extractor.extract_batch(state, views, remaining, policy_name)
+
+        for idx, candidate in enumerate(shortlisted):
+            forced_state = state.copy()
+            forced_ep = ep_manager.copy()
+            forced_remaining = _clone_remaining(remaining)
+            _apply_block_candidate(candidate, forced_state, forced_ep)
+            forced_remaining = _decrement_remaining(
+                forced_remaining, candidate.sku_id, candidate.item_count
+            )
+            best_completion = _best_cheap_completion(
+                request=request,
+                state=forced_state,
+                ep_manager=forced_ep,
+                remaining=forced_remaining,
+                checker=checker,
+                budget_ms=finish_budget_ms,
+            )
+            rows.append(
+                {
+                    "group_id": group_id,
+                    "policy_name": policy_name,
+                    "features": X[idx].tolist(),
+                    "target": best_completion.score,
+                }
+            )
+
+        best_candidate = shortlisted[0]
+        _apply_block_candidate(best_candidate, state, ep_manager)
+        remaining = _decrement_remaining(
+            remaining, best_candidate.sku_id, best_candidate.item_count
+        )
+        group_id += 1
+
+    return rows
+
+
+def _init_common_components(
+    request: Dict[str, Any]
+) -> Tuple[FeasibilityChecker, CandidateGenerator, int]:
+    pallet = request["pallet"]
+    checker = FeasibilityChecker(
+        pallet["length_mm"],
+        pallet["width_mm"],
+        pallet["max_height_mm"],
+        pallet["max_weight_kg"],
+    )
+    candidate_gen = CandidateGenerator(checker, max_candidates=200)
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    return checker, candidate_gen, total_items
+
+
+def _fresh_search_state(
+    request: Dict[str, Any]
+) -> Tuple[PalletState, ExtremePointManager, List[RemainingItem]]:
+    pallet = request["pallet"]
+    state = PalletState(
+        pallet["length_mm"],
+        pallet["width_mm"],
+        pallet["max_height_mm"],
+        pallet["max_weight_kg"],
+    )
+    ep_manager = ExtremePointManager(pallet["length_mm"], pallet["width_mm"])
+    remaining = [RemainingItem(box) for box in request["boxes"]]
+    return state, ep_manager, remaining
+
+
+def _clone_remaining(remaining: List[RemainingItem]) -> List[RemainingItem]:
+    cloned: List[RemainingItem] = []
+    for item in remaining:
+        new_item = RemainingItem.__new__(RemainingItem)
+        new_item.sku_id = item.sku_id
+        new_item.length = item.length
+        new_item.width = item.width
+        new_item.height = item.height
+        new_item.weight = item.weight
+        new_item.strict_upright = item.strict_upright
+        new_item.fragile = item.fragile
+        new_item.stackable = item.stackable
+        new_item.remaining_qty = item.remaining_qty
+        cloned.append(new_item)
+    return cloned
+
+
+def _decrement_remaining(
+    remaining: List[RemainingItem],
+    sku_id: str,
+    count: int,
+) -> List[RemainingItem]:
+    updated = _clone_remaining(remaining)
+    for item in updated:
+        if item.sku_id == sku_id:
+            item.remaining_qty = max(0, item.remaining_qty - count)
+            break
+    return updated
+
+
+def _remaining_from_placements(
+    request_boxes: Sequence[Dict[str, Any]],
+    placements: Sequence[PlacedBox],
+) -> List[RemainingItem]:
+    counts: Dict[str, int] = {}
+    for placement in placements:
+        counts[placement.sku_id] = counts.get(placement.sku_id, 0) + 1
+    remaining: List[RemainingItem] = []
+    for box in request_boxes:
+        remaining.append(
+            RemainingItem(box, placed_count=counts.get(box["sku_id"], 0))
+        )
+    return remaining
+
+
+def _load_optional_ranker(
+    model_dir: str | Path,
+) -> Tuple[Optional[BlockRanker], Optional[BlockFeatureExtractor]]:
+    ranker = BlockRanker(model_dir=model_dir)
+    if ranker.load():
+        return ranker, BlockFeatureExtractor()
+    return None, None
+
+
+def _construct_with_policy(
+    request: Dict[str, Any],
+    policy_name: str,
+    state: PalletState,
+    ep_manager: ExtremePointManager,
+    remaining: List[RemainingItem],
+    checker: FeasibilityChecker,
+    deadline: float,
+    ranker: Optional[BlockRanker],
+    extractor: Optional[BlockFeatureExtractor],
+    max_block_span: int,
+) -> PolicyRun:
+    t0 = time.perf_counter()
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    steps: List[BlockStep] = []
+    used_model = False
+
+    while time.perf_counter() < deadline:
+        if sum(item.remaining_qty for item in remaining) == 0:
+            break
+        candidates = _generate_block_candidates(
+            state=state,
+            ep_manager=ep_manager,
+            remaining=remaining,
+            checker=checker,
+            policy_name=policy_name,
+            max_block_span=max_block_span,
+            max_ep=24,
+            max_candidates=128,
+        )
+        if not candidates:
+            break
+
+        _rank_candidates(
+            candidates=candidates,
+            state=state,
+            remaining=remaining,
+            policy_name=policy_name,
+            ranker=ranker,
+            extractor=extractor,
+        )
+        used_model = used_model or bool(ranker and extractor)
+        best = candidates[0]
+        before = _solution_proxy(state, total_items)
+        _apply_block_candidate(best, state, ep_manager)
+        remaining = _decrement_remaining(remaining, best.sku_id, best.item_count)
+        after = _solution_proxy(state, total_items)
+        steps.append(
+            BlockStep(
+                candidate=best,
+                marginal_gain=after - before,
+                frontier_exposure=_frontier_exposure(best, state),
+            )
+        )
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    return PolicyRun(
+        name=policy_name,
+        placements=list(state.placed),
+        remaining=_clone_remaining(remaining),
+        block_steps=steps,
+        score=_solution_proxy(state, total_items),
+        elapsed_ms=elapsed_ms,
+        used_model=used_model,
+    )
+
+
+def _run_legacy_portfolio(
+    request: Dict[str, Any],
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    budget_ms: int,
+) -> PolicyRun:
+    t0 = time.perf_counter()
+    task_id, pallet, boxes = _request_to_models(request)
+    total_items = sum(box.quantity for box in boxes)
+    best: Optional[PolicyRun] = None
+
+    for sort_name in LEGACY_PORTFOLIO_SORTS:
+        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=sort_name)
+        placements = _placements_from_public_solution(
+            request["boxes"], solution.placements
+        )
+        remaining = _remaining_from_placements(request["boxes"], placements)
+        state, _ = _rebuild_state(request, placements)
+        run = PolicyRun(
+            name=f"legacy_portfolio:{sort_name}",
+            placements=placements,
+            remaining=remaining,
+            block_steps=[],
+            score=_solution_proxy(state, total_items),
+            elapsed_ms=solution.solve_time_ms,
+            used_model=False,
+        )
+        improved = _maybe_postprocess_run(
+            request=request,
+            run=run,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            total_items=total_items,
+            time_budget_left_ms=max(0, budget_ms - int((time.perf_counter() - t0) * 1000)),
+        )
+        run = improved
+        if best is None or _run_sort_key(run) > _run_sort_key(best):
+            best = run
+        if budget_ms > 0 and (time.perf_counter() - t0) * 1000 > budget_ms:
+            break
+
+    assert best is not None
+    return best
+
+
+def _best_cheap_completion(
+    request: Dict[str, Any],
+    state: PalletState,
+    ep_manager: ExtremePointManager,
+    remaining: List[RemainingItem],
+    checker: FeasibilityChecker,
+    budget_ms: int,
+) -> PolicyRun:
+    deadline = time.perf_counter() + max(budget_ms, 1) / 1000.0
+    per_policy = max(budget_ms // 3, 10)
+    runs = []
+    for policy_name in ("coverage_fill", "foundation"):
+        run = _construct_with_policy(
+            request=request,
+            policy_name=policy_name,
+            state=state.copy(),
+            ep_manager=ep_manager.copy(),
+            remaining=_clone_remaining(remaining),
+            checker=checker,
+            deadline=min(deadline, time.perf_counter() + per_policy / 1000.0),
+            ranker=None,
+            extractor=None,
+            max_block_span=4,
+        )
+        runs.append(run)
+    if time.perf_counter() < deadline:
+        runs.append(
+            _run_legacy_portfolio(
+                request,
+                checker=checker,
+                candidate_gen=CandidateGenerator(checker, max_candidates=200),
+                budget_ms=per_policy,
+            )
+        )
+    return _select_best_run(runs)
+
+
+def _repair_run(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    ranker: Optional[BlockRanker],
+    extractor: Optional[BlockFeatureExtractor],
+    budget_ms: int,
+) -> PolicyRun:
+    remove_count = max(1, math.ceil(len(run.block_steps) * 0.2))
+    ranked_steps = sorted(
+        run.block_steps,
+        key=lambda step: (step.marginal_gain, -step.frontier_exposure),
+    )
+    removed = set(id(step) for step in ranked_steps[:remove_count])
+    kept_steps = [step for step in run.block_steps if id(step) not in removed]
+    kept_placements = [
+        placed
+        for step in kept_steps
+        for placed in step.candidate.units
+    ]
+
+    state, ep_manager = _rebuild_state(request, kept_placements)
+    remaining = _remaining_from_placements(request["boxes"], kept_placements)
+    deadline = time.perf_counter() + budget_ms / 1000.0
+
+    refill = _construct_with_policy(
+        request=request,
+        policy_name="coverage_fill",
+        state=state.copy(),
+        ep_manager=ep_manager.copy(),
+        remaining=_clone_remaining(remaining),
+        checker=checker,
+        deadline=min(deadline, time.perf_counter() + budget_ms * 0.7 / 1000.0),
+        ranker=ranker,
+        extractor=extractor,
+        max_block_span=4,
+    )
+    runs = [refill]
+    if time.perf_counter() < deadline:
+        singles = _construct_with_policy(
+            request=request,
+            policy_name="coverage_fill",
+            state=state.copy(),
+            ep_manager=ep_manager.copy(),
+            remaining=_clone_remaining(remaining),
+            checker=checker,
+            deadline=deadline,
+            ranker=ranker,
+            extractor=extractor,
+            max_block_span=1,
+        )
+        runs.append(singles)
+
+    repaired = _select_best_run(runs)
+    if _run_sort_key(repaired) <= _run_sort_key(run):
+        return run
+    repaired.name = f"{run.name}+repair"
+    return repaired
+
+
+def _maybe_postprocess_run(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    total_items: int,
+    time_budget_left_ms: int,
+) -> PolicyRun:
+    if time_budget_left_ms <= 0 or not run.placements:
+        return run
+
+    pallet = request["pallet"]
+    t0 = time.perf_counter()
+    working_state = PalletState(
+        pallet["length_mm"],
+        pallet["width_mm"],
+        pallet["max_height_mm"],
+        pallet["max_weight_kg"],
+    )
+    placements, leftover = postprocess(
+        _reindex_placements(run.placements),
+        _clone_remaining(run.remaining),
+        working_state,
+        checker,
+        ExtremePointManager(pallet["length_mm"], pallet["width_mm"]),
+        candidate_gen,
+    )
+    post_state, _ = _rebuild_state(request, placements)
+    post_score = _solution_proxy(post_state, total_items)
+    if post_score <= run.score + 1e-9:
+        return run
+
+    return PolicyRun(
+        name=f"{run.name}+postprocess",
+        placements=placements,
+        remaining=leftover,
+        block_steps=[],
+        score=post_score,
+        elapsed_ms=run.elapsed_ms + int((time.perf_counter() - t0) * 1000),
+        used_model=run.used_model,
+    )
+
+
+def _generate_block_candidates(
+    state: PalletState,
+    ep_manager: ExtremePointManager,
+    remaining: List[RemainingItem],
+    checker: FeasibilityChecker,
+    policy_name: str,
+    max_block_span: int,
+    max_ep: int,
+    max_candidates: int,
+) -> List[BlockCandidate]:
+    points = _rank_extreme_points(ep_manager.get_points(), state)[:max_ep]
+    coarse_specs: List[_BlockSpec] = []
+    seen_specs = set()
+
+    for item in remaining:
+        if item.remaining_qty <= 0:
+            continue
+        for ep_x, ep_y, ep_z in points:
+            for pl, pw, ph, rotation_code in get_orientations(
+                item.length, item.width, item.height, item.strict_upright
+            ):
+                for nx in range(1, max_block_span + 1):
+                    for ny in range(1, max_block_span + 1):
+                        base_count = nx * ny
+                        if base_count > item.remaining_qty:
+                            continue
+                        for nz in range(1, max_block_span + 1):
+                            count = base_count * nz
+                            if count > item.remaining_qty:
+                                continue
+                            block_l = pl * nx
+                            block_w = pw * ny
+                            block_h = ph * nz
+                            z_base = max(
+                                ep_z, state.get_max_z_at(ep_x, ep_y, block_l, block_w)
+                            )
+                            aabb = AABB(
+                                ep_x,
+                                ep_y,
+                                z_base,
+                                ep_x + block_l,
+                                ep_y + block_w,
+                                z_base + block_h,
+                            )
+                            if not checker.check_bounds(aabb):
+                                continue
+                            total_weight = count * item.weight
+                            if not checker.check_weight(total_weight, state):
+                                continue
+                            wall_count = int(aabb.x_min == 0 or aabb.x_max >= state.length)
+                            wall_count += int(aabb.y_min == 0 or aabb.y_max >= state.width)
+                            corner_touch = wall_count == 2
+                            support_ratio = state.get_support_ratio(aabb)
+                            score = _heuristic_block_score(
+                                policy_name=policy_name,
+                                state=state,
+                                item_count=count,
+                                block_l=block_l,
+                                block_w=block_w,
+                                block_h=block_h,
+                                total_weight=total_weight,
+                                fragile=item.fragile,
+                                z=z_base,
+                                support_ratio=support_ratio,
+                                wall_count=wall_count,
+                                corner_touch=corner_touch,
+                            )
+                            spec = _BlockSpec(
+                                sku_id=item.sku_id,
+                                placed_dims=(pl, pw, ph),
+                                rotation_code=rotation_code,
+                                nx=nx,
+                                ny=ny,
+                                nz=nz,
+                                item_count=count,
+                                total_weight=total_weight,
+                                fragile=item.fragile,
+                                stackable=item.stackable,
+                                strict_upright=item.strict_upright,
+                                x=ep_x,
+                                y=ep_y,
+                                z=z_base,
+                                heuristic_score=score,
+                            )
+                            spec_key = (
+                                spec.sku_id,
+                                spec.rotation_code,
+                                spec.nx,
+                                spec.ny,
+                                spec.nz,
+                                spec.x,
+                                spec.y,
+                                spec.z,
+                            )
+                            if spec_key in seen_specs:
+                                continue
+                            seen_specs.add(spec_key)
+                            coarse_specs.append(spec)
+
+    coarse_specs.sort(key=lambda spec: spec.heuristic_score, reverse=True)
+    coarse_specs = coarse_specs[: max_candidates * 4]
+    by_sku = {item.sku_id: item for item in remaining}
+    candidates: List[BlockCandidate] = []
+    for spec in coarse_specs:
+        candidate = _materialize_block_candidate(
+            spec,
+            by_sku[spec.sku_id],
+            state,
+            checker,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+        if len(candidates) >= max_candidates:
+            break
+    return candidates
+
+
+def _materialize_block_candidate(
+    spec: _BlockSpec,
+    item: RemainingItem,
+    state: PalletState,
+    checker: FeasibilityChecker,
+) -> Optional[BlockCandidate]:
+    sim_state = state.copy()
+    units: List[PlacedBox] = []
+    instance = state.next_instance_index(item.sku_id)
+    pl, pw, ph = spec.placed_dims
+
+    for iz in range(spec.nz):
+        for iy in range(spec.ny):
+            for ix in range(spec.nx):
+                aabb = AABB(
+                    spec.x + ix * pl,
+                    spec.y + iy * pw,
+                    spec.z + iz * ph,
+                    spec.x + (ix + 1) * pl,
+                    spec.y + (iy + 1) * pw,
+                    spec.z + (iz + 1) * ph,
+                )
+                if not _unit_feasible(aabb, item, sim_state, checker):
+                    return None
+                placed = PlacedBox(
+                    sku_id=item.sku_id,
+                    instance_index=instance,
+                    aabb=aabb,
+                    weight=item.weight,
+                    fragile=item.fragile,
+                    stackable=item.stackable,
+                    strict_upright=item.strict_upright,
+                    rotation_code=spec.rotation_code,
+                    placed_dims=spec.placed_dims,
+                )
+                sim_state.place(placed)
+                units.append(placed)
+                instance += 1
+
+    block_aabb = AABB(
+        spec.x,
+        spec.y,
+        spec.z,
+        spec.x + pl * spec.nx,
+        spec.y + pw * spec.ny,
+        spec.z + ph * spec.nz,
+    )
+    wall_count = int(block_aabb.x_min == 0 or block_aabb.x_max >= state.length)
+    wall_count += int(block_aabb.y_min == 0 or block_aabb.y_max >= state.width)
+    return BlockCandidate(
+        sku_id=spec.sku_id,
+        rotation_code=spec.rotation_code,
+        placed_dims=spec.placed_dims,
+        nx=spec.nx,
+        ny=spec.ny,
+        nz=spec.nz,
+        item_count=spec.item_count,
+        total_weight=spec.total_weight,
+        fragile=spec.fragile,
+        stackable=spec.stackable,
+        strict_upright=spec.strict_upright,
+        aabb=block_aabb,
+        units=tuple(units),
+        support_ratio=state.get_support_ratio(block_aabb),
+        wall_count=wall_count,
+        corner_touch=wall_count == 2,
+        heuristic_score=spec.heuristic_score,
+    )
+
+
+def _unit_feasible(
+    aabb: AABB,
+    item: RemainingItem,
+    state: PalletState,
+    checker: FeasibilityChecker,
+) -> bool:
+    if not checker.check_bounds(aabb):
+        return False
+    if not checker.check_weight(item.weight, state):
+        return False
+    if not checker.check_collision(aabb, state):
+        return False
+    if not checker.check_support(aabb, state):
+        return False
+    if not checker.check_stackable(aabb, state):
+        return False
+    if _heavy_non_fragile_on_fragile(aabb, item.weight, item.fragile, state):
+        return False
+    return True
+
+
+def _heavy_non_fragile_on_fragile(
+    aabb: AABB,
+    weight: float,
+    fragile: bool,
+    state: PalletState,
+) -> bool:
+    if fragile or weight <= FRAGILE_WEIGHT_THRESHOLD or aabb.z_min == 0:
+        return False
+    for placed in state.placed:
+        if not placed.fragile:
+            continue
+        if abs(placed.aabb.z_max - aabb.z_min) < EPSILON:
+            if aabb.overlap_area_xy(placed.aabb) > 0:
+                return True
+    return False
+
+
+def _heuristic_block_score(
+    policy_name: str,
+    state: PalletState,
+    item_count: int,
+    block_l: int,
+    block_w: int,
+    block_h: int,
+    total_weight: float,
+    fragile: bool,
+    z: int,
+    support_ratio: float,
+    wall_count: int,
+    corner_touch: bool,
+) -> float:
+    vol_norm = (block_l * block_w * block_h) / max(state.pallet_volume, 1)
+    area_norm = (block_l * block_w) / max(state.pallet_area, 1)
+    z_penalty = z / max(state.max_height, 1)
+    weight_norm = total_weight / max(state.max_weight, 1)
+    size_norm = item_count / 64.0
+    floor_coverage = sum(
+        placed.aabb.base_area() for placed in state.placed if placed.aabb.z_min == 0
+    ) / max(state.pallet_area, 1)
+
+    if policy_name == "foundation":
+        return (
+            vol_norm * 4.0
+            + area_norm * 2.2
+            + weight_norm * 2.2
+            + size_norm * 1.5
+            + support_ratio * 1.3
+            + wall_count * 0.4
+            + (0.2 if corner_touch else 0.0)
+            - z_penalty * 3.2
+            - (0.8 if fragile else 0.0)
+        )
+
+    if policy_name == "fragile_last":
+        score = (
+            vol_norm * 3.0
+            + area_norm * 1.8
+            + weight_norm * 1.8
+            + support_ratio * 1.2
+            - z_penalty * 2.5
+        )
+        if fragile and (
+            state.max_z < state.max_height * 0.70
+            and state.total_weight < state.max_weight * 0.80
+        ):
+            score -= 3.5
+        elif fragile:
+            score += 0.6
+        return score
+
+    residual_x = (state.length - block_l) / max(state.length, 1)
+    residual_y = (state.width - block_w) / max(state.width, 1)
+    fill_bonus = 1.0 - (residual_x + residual_y) * 0.5
+    small_bonus = 1.0 - size_norm
+    if floor_coverage > 0.60:
+        return (
+            small_bonus * 2.6
+            + fill_bonus * 2.1
+            + support_ratio * 1.3
+            + wall_count * 0.5
+            + (0.25 if corner_touch else 0.0)
+            - z_penalty * 1.8
+            - (0.4 if fragile and state.max_z < state.max_height * 0.4 else 0.0)
+        )
+    return (
+        vol_norm * 2.0
+        + area_norm * 1.4
+        + fill_bonus * 1.1
+        + support_ratio * 1.0
+        - z_penalty * 2.2
+    )
+
+
+def _rank_candidates(
+    candidates: List[BlockCandidate],
+    state: PalletState,
+    remaining: List[RemainingItem],
+    policy_name: str,
+    ranker: Optional[BlockRanker],
+    extractor: Optional[BlockFeatureExtractor],
+) -> None:
+    heuristic_scores = np.asarray(
+        [candidate.heuristic_score for candidate in candidates], dtype=np.float32
+    )
+    final_scores = heuristic_scores.copy()
+    if ranker is not None and extractor is not None and ranker.is_trained:
+        views = [candidate.feature_view(state) for candidate in candidates]
+        X = extractor.extract_batch(state, views, remaining, policy_name)
+        model_scores = ranker.predict(X)
+        final_scores = 0.7 * normalize_scores(model_scores) + 0.3 * normalize_scores(
+            heuristic_scores
+        )
+    order = np.argsort(-final_scores)
+    candidates[:] = [candidates[idx] for idx in order]
+
+
+def _apply_block_candidate(
+    candidate: BlockCandidate,
+    state: PalletState,
+    ep_manager: ExtremePointManager,
+) -> None:
+    for placed in candidate.units:
+        state.place(placed)
+        ep_manager.update_after_placement(placed.aabb, state)
+
+
+def _select_best_run(runs: Sequence[PolicyRun]) -> PolicyRun:
+    return max(runs, key=_run_sort_key)
+
+
+def _run_sort_key(run: PolicyRun) -> Tuple[float, int]:
+    return (run.score, -run.elapsed_ms)
+
+
+def _frontier_exposure(candidate: BlockCandidate, state: PalletState) -> float:
+    top_exposure = candidate.aabb.z_max / max(state.max_height, 1)
+    side_exposure = 1.0 - (candidate.wall_count / 2.0)
+    return top_exposure + side_exposure
+
+
+def _rank_extreme_points(
+    points: Iterable[Tuple[int, int, int]],
+    state: PalletState,
+) -> List[Tuple[int, int, int]]:
+    ranked = list(points)
+    ranked.sort(
+        key=lambda point: (
+            point[2],
+            0 if point[0] == 0 or point[0] >= state.length else 1,
+            0 if point[1] == 0 or point[1] >= state.width else 1,
+            point[0] + point[1],
+        )
+    )
+    return ranked
+
+
+def _solution_proxy(state: PalletState, total_items: int) -> float:
+    placements = state.placed
+    vol_util = state.placed_volume / max(state.pallet_volume, 1)
+    coverage = len(placements) / max(total_items, 1)
+    fragility_violations = 0
+    for top in placements:
+        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        for bottom in placements:
+            if not bottom.fragile:
+                continue
+            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON:
+                if top.aabb.overlap_area_xy(bottom.aabb) > 0:
+                    fragility_violations += 1
+    fragility_score = max(0.0, 1.0 - 0.05 * fragility_violations)
+    return 0.50 * vol_util + 0.30 * coverage + 0.10 * fragility_score
+
+
+def _rebuild_state(
+    request: Dict[str, Any],
+    placements: Sequence[PlacedBox],
+) -> Tuple[PalletState, ExtremePointManager]:
+    pallet = request["pallet"]
+    state = PalletState(
+        pallet["length_mm"],
+        pallet["width_mm"],
+        pallet["max_height_mm"],
+        pallet["max_weight_kg"],
+    )
+    ep_manager = ExtremePointManager(pallet["length_mm"], pallet["width_mm"])
+    for placement in placements:
+        state.place(placement)
+        ep_manager.update_after_placement(placement.aabb, state)
+    return state, ep_manager
+
+
+def _request_to_models(request: Dict[str, Any]) -> Tuple[str, Pallet, List[Box]]:
+    pallet_data = request["pallet"]
+    pallet = Pallet(
+        type_id=pallet_data.get("type_id", "unknown"),
+        length_mm=pallet_data["length_mm"],
+        width_mm=pallet_data["width_mm"],
+        max_height_mm=pallet_data["max_height_mm"],
+        max_weight_kg=pallet_data["max_weight_kg"],
+    )
+    boxes = [
+        Box(
+            sku_id=box["sku_id"],
+            description=box.get("description", ""),
+            length_mm=box["length_mm"],
+            width_mm=box["width_mm"],
+            height_mm=box["height_mm"],
+            weight_kg=box["weight_kg"],
+            quantity=box["quantity"],
+            strict_upright=box.get("strict_upright", False),
+            fragile=box.get("fragile", False),
+            stackable=box.get("stackable", True),
+        )
+        for box in request["boxes"]
+    ]
+    return request["task_id"], pallet, boxes
+
+
+def _placements_from_public_solution(
+    request_boxes: Sequence[Dict[str, Any]],
+    placements: Sequence[Any],
+) -> List[PlacedBox]:
+    by_sku = {box["sku_id"]: box for box in request_boxes}
+    result: List[PlacedBox] = []
+    for placement in placements:
+        meta = by_sku[placement.sku_id]
+        aabb = AABB(
+            placement.x_mm,
+            placement.y_mm,
+            placement.z_mm,
+            placement.x_mm + placement.length_mm,
+            placement.y_mm + placement.width_mm,
+            placement.z_mm + placement.height_mm,
+        )
+        result.append(
+            PlacedBox(
+                sku_id=placement.sku_id,
+                instance_index=placement.instance_index,
+                aabb=aabb,
+                weight=meta["weight_kg"],
+                fragile=meta.get("fragile", False),
+                stackable=meta.get("stackable", True),
+                strict_upright=meta.get("strict_upright", False),
+                rotation_code=placement.rotation_code,
+                placed_dims=(
+                    placement.length_mm,
+                    placement.width_mm,
+                    placement.height_mm,
+                ),
+            )
+        )
+    return result
+
+
+def _reindex_placements(placements: Sequence[PlacedBox]) -> List[PlacedBox]:
+    counters: Dict[str, int] = {}
+    indexed: List[PlacedBox] = []
+    for placement in placements:
+        index = counters.get(placement.sku_id, 0)
+        counters[placement.sku_id] = index + 1
+        indexed.append(
+            PlacedBox(
+                sku_id=placement.sku_id,
+                instance_index=index,
+                aabb=placement.aabb,
+                weight=placement.weight,
+                fragile=placement.fragile,
+                stackable=placement.stackable,
+                strict_upright=placement.strict_upright,
+                rotation_code=placement.rotation_code,
+                placed_dims=placement.placed_dims,
+            )
+        )
+    return indexed
+
+
+def _format_output(
+    task_id: str,
+    placements: List[PlacedBox],
+    leftover: List[RemainingItem],
+    boxes: List[Dict[str, Any]],
+    state: PalletState,
+    solve_time_ms: int,
+) -> Dict[str, Any]:
+    box_by_sku = {box["sku_id"]: box for box in boxes}
+    placed_list = []
+    for placement in _reindex_placements(placements):
+        placed_list.append(
+            {
+                "sku_id": placement.sku_id,
+                "instance_index": placement.instance_index,
+                "position": {
+                    "x_mm": placement.aabb.x_min,
+                    "y_mm": placement.aabb.y_min,
+                    "z_mm": placement.aabb.z_min,
+                },
+                "dimensions_placed": {
+                    "length_mm": placement.placed_dims[0],
+                    "width_mm": placement.placed_dims[1],
+                    "height_mm": placement.placed_dims[2],
+                },
+                "rotation_code": placement.rotation_code,
+            }
+        )
+
+    unplaced_list = []
+    for item in leftover:
+        if item.remaining_qty <= 0:
+            continue
+        meta = box_by_sku[item.sku_id]
+        reason = _classify_unplaced_reason(item, state, meta)
+        unplaced_list.append(
+            {
+                "sku_id": item.sku_id,
+                "quantity_unplaced": item.remaining_qty,
+                "reason": reason,
+            }
+        )
+
+    return {
+        "task_id": task_id,
+        "solver_version": SOLVER_VERSION,
+        "solve_time_ms": solve_time_ms,
+        "placements": placed_list,
+        "unplaced": unplaced_list,
+    }
+
+
+def _classify_unplaced_reason(
+    item: RemainingItem,
+    state: PalletState,
+    meta: Dict[str, Any],
+) -> str:
+    if state.total_weight + item.weight > state.max_weight + EPSILON:
+        return UNPLACED_REASONS["weight"]
+    min_height = min(meta["length_mm"], meta["width_mm"], meta["height_mm"])
+    if meta.get("strict_upright", False):
+        min_height = meta["height_mm"]
+    if state.max_z + min_height > state.max_height + EPSILON:
+        return UNPLACED_REASONS["height"]
+    return UNPLACED_REASONS["space"]

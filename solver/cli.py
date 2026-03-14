@@ -32,7 +32,13 @@ def main():
     )
     parser.add_argument(
         "--model-dir", default="models",
-        help="Optional directory with trained HYB model artifacts",
+        help="Optional directory with trained model artifacts",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="portfolio_block",
+        choices=["portfolio_block", "legacy_hybrid", "legacy_greedy"],
+        help="Runtime strategy (default: portfolio_block)",
     )
     parser.add_argument(
         "--time-budget", type=int, default=900,
@@ -70,6 +76,7 @@ def main():
             time_budget_ms=args.time_budget,
             beam_width=beam_width,
             model_dir=args.model_dir,
+            strategy=args.strategy,
         )
 
         result = solution_to_dict(solution)
