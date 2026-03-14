@@ -17,6 +17,7 @@ from scenario_catalog import (
     DIAGNOSTIC_SCENARIOS,
     EXTENDED_REALISTIC_SCENARIOS,
     ORGANIZER_SCENARIOS,
+    PRIVATE_TEST_SCENARIOS,
 )
 from solver.packer import SORT_KEYS
 from validator import evaluate_solution
@@ -151,14 +152,17 @@ def format_markdown(results: list) -> str:
     organizer_names = {name for name, _ in ORGANIZER_SCENARIOS}
     extended_names = {name for name, _ in EXTENDED_REALISTIC_SCENARIOS}
     diagnostic_names = {name for name, _ in DIAGNOSTIC_SCENARIOS}
+    private_names = {name for name, _ in PRIVATE_TEST_SCENARIOS}
 
     organizer_results = [r for r in results if r["scenario"] in organizer_names]
     extended_results = [r for r in results if r["scenario"] in extended_names]
     diagnostic_results = [r for r in results if r["scenario"] in diagnostic_names]
+    private_results = [r for r in results if r["scenario"] in private_names]
 
     lines.extend(render_table("Сценарии организаторов", organizer_results))
     lines.extend(render_table("Расширенные реалистичные сценарии", extended_results))
     lines.extend(render_table("Sanity и диагностические сценарии", diagnostic_results))
+    lines.extend(render_table("Private test (предсказание приватных тестов)", private_results))
 
     overall_avg = (
         sum(r["final_score"] for r in results if r["valid"]) / len(results)

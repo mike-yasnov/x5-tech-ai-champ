@@ -25,10 +25,29 @@ EXTENDED_REALISTIC_SCENARIOS = [
     ("non_stackable_caps", 55),
 ]
 
+PRIVATE_TEST_SCENARIOS = [
+    ("private_heavy_eggs_crush", 60),
+    ("private_all_upright_tight", 61),
+    ("private_fragile_dominant", 62),
+    ("private_weight_razor", 63),
+    ("private_sugar_flood", 64),
+    ("private_wine_eggs_dilemma", 65),
+    ("private_canned_wall", 66),
+    ("private_chips_mountain", 67),
+    ("private_weight_tradeoff", 68),
+    ("private_full_catalog", 69),
+    ("private_micro_batch", 70),
+    ("private_upright_overflow", 71),
+    ("private_nostack_fragile_mix", 72),
+    ("private_heavy_fragile_sandwich", 73),
+    ("private_odd_pallet_stress", 74),
+]
+
 BENCHMARK_SCENARIOS = (
     ORGANIZER_SCENARIOS
     + EXTENDED_REALISTIC_SCENARIOS
     + DIAGNOSTIC_SCENARIOS
+    + PRIVATE_TEST_SCENARIOS
 )
 
 BENCHMARK_SCENARIO_NAMES = [name for name, _ in BENCHMARK_SCENARIOS]
