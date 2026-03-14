@@ -3,7 +3,7 @@
 import logging
 import time
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from .models import Box, Pallet, Placement, Solution, UnplacedItem
 from .orientations import get_orientations
@@ -43,12 +43,17 @@ def _sort_constrained_first(box: Box) -> tuple:
     return (priority, -box.volume)
 
 
+def _sort_coverage_tie(box: Box) -> tuple:
+    return (box.volume, box.base_area, -box.quantity, box.weight_kg)
+
+
 SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "volume_desc": _sort_volume_desc,
     "weight_desc": _sort_weight_desc,
     "base_area_desc": _sort_base_area_desc,
     "density_desc": _sort_density_desc,
     "constrained_first": _sort_constrained_first,
+    "coverage_tie": _sort_coverage_tie,
 }
 
 
@@ -63,25 +68,18 @@ def _expand_boxes(boxes: List[Box]) -> List[Tuple[Box, int]]:
     return result
 
 
-# ── Greedy packer ───────────────────────────────────────────────────
+def order_boxes(boxes: Iterable[Box], sort_key_name: str = "volume_desc") -> List[Box]:
+    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
+    return sorted(list(boxes), key=sort_fn)
 
-def pack_greedy(
+
+def _pack_instances(
     task_id: str,
     pallet: Pallet,
-    boxes: List[Box],
-    sort_key_name: str = "volume_desc",
+    instances: List[Tuple[Box, int]],
+    sort_label: str,
 ) -> Solution:
-    """Pack boxes greedily using Extreme Points + scoring function.
-
-    Returns a Solution with placements and unplaced items.
-    """
     t0 = time.perf_counter()
-
-    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
-
-    # Sort boxes by key, then expand
-    sorted_boxes = sorted(boxes, key=sort_fn)
-    instances = _expand_boxes(sorted_boxes)
 
     state = PalletState(pallet)
     placements: List[Placement] = []
@@ -89,7 +87,7 @@ def pack_greedy(
 
     logger.info(
         "[pack_greedy] task=%s sort=%s total_instances=%d",
-        task_id, sort_key_name, len(instances),
+        task_id, sort_label, len(instances),
     )
 
     for box, inst_idx in instances:
@@ -97,7 +95,7 @@ def pack_greedy(
         best_score = -1.0
         best_placement: Optional[Tuple[int, int, int, int, int, int, str]] = None
 
-        # Try each EP × orientation
+        # Try each EP x orientation
         for ep in list(state.extreme_points):
             ex, ey, ez = ep
             for dx, dy, dz, rot_code in orientations:
@@ -129,7 +127,6 @@ def pack_greedy(
                 rotation_code=rot_code,
             ))
         else:
-            # Determine reason
             if state.current_weight + box.weight_kg > pallet.max_weight_kg:
                 reason = "weight_limit_exceeded"
             else:
@@ -150,7 +147,7 @@ def pack_greedy(
 
     logger.info(
         "[pack_greedy] done sort=%s placed=%d unplaced=%d time=%dms",
-        sort_key_name, len(placements), sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
+        sort_label, len(placements), sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
     )
 
     return Solution(
@@ -160,3 +157,29 @@ def pack_greedy(
         placements=placements,
         unplaced=unplaced,
     )
+
+
+def pack_ordered_boxes(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+    label: str = "custom_order",
+) -> Solution:
+    instances = _expand_boxes(boxes)
+    return _pack_instances(task_id, pallet, instances, label)
+
+
+# ── Greedy packer ───────────────────────────────────────────────────
+
+def pack_greedy(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+    sort_key_name: str = "volume_desc",
+) -> Solution:
+    """Pack boxes greedily using Extreme Points + scoring function.
+
+    Returns a Solution with placements and unplaced items.
+    """
+    sorted_boxes = order_boxes(boxes, sort_key_name=sort_key_name)
+    return pack_ordered_boxes(task_id, pallet, sorted_boxes, label=sort_key_name)

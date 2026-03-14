@@ -74,6 +74,7 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
             "sku_id": sku_id,
             "weight": sku["weight_kg"],
             "fragile": sku["fragile"],
+            "stackable": sku.get("stackable", True),
             "strict_upright": sku["strict_upright"],
             "orig_height": sku["height_mm"],
             "x_min": x_min, "x_max": x_max,
@@ -140,6 +141,17 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
                     "valid": False,
                     "error": f"Box {b1['sku_id']} has insufficient support ({support_area:.1f}/{b1['area']:.1f}).",
                 }
+
+        # 6) Stackable constraint
+        if not b1["stackable"]:
+            for b2 in placements:
+                if b1 is b2:
+                    continue
+                if abs(b1["z_max"] - b2["z_min"]) < 1e-6 and calc_overlap_2d(b1, b2) > 0:
+                    return {
+                        "valid": False,
+                        "error": f"Box {b2['sku_id']} placed on top of non-stackable {b1['sku_id']}.",
+                    }
 
     # ---------------------------
     # SOFT metrics

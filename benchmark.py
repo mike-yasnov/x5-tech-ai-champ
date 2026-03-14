@@ -69,6 +69,7 @@ def run_benchmark(
     n_restarts: int = 10,
     time_budget_ms: int = 5000,
     strategy: str = "portfolio_block",
+    model_dir: str = "models",
 ) -> list:
     results = []
     if n_restarts is None:
@@ -88,6 +89,7 @@ def run_benchmark(
             request_dict=request_dict,
             n_restarts=n_restarts,
             time_budget_ms=time_budget_ms,
+            model_dir=model_dir,
             strategy=strategy,
         )
         wall_time_ms = int((time.perf_counter() - t0) * 1000)
@@ -223,9 +225,18 @@ def main():
         choices=["portfolio_block", "legacy_hybrid", "legacy_greedy"],
         help="Runtime strategy to benchmark",
     )
+    parser.add_argument(
+        "--model-dir",
+        default="models",
+        help="Directory with optional selector or ranker artifacts",
+    )
     args = parser.parse_args()
 
-    results = run_benchmark(n_restarts=args.restarts, strategy=args.strategy)
+    results = run_benchmark(
+        n_restarts=args.restarts,
+        strategy=args.strategy,
+        model_dir=args.model_dir,
+    )
     md = format_markdown(results)
     print(md)
 
