@@ -15,6 +15,31 @@ sys.path.insert(0, ".")
 logger = logging.getLogger(__name__)
 
 
+def _evaluate_quality_score(request_dict: dict, solution: Solution) -> Optional[float]:
+    """Evaluate packing quality without rewarding solve time."""
+    try:
+        from validator import evaluate_solution
+
+        response_dict = solution_to_dict(solution)
+        result = evaluate_solution(request_dict, response_dict)
+        if not result.get("valid"):
+            logger.warning(
+                "[evaluate_quality] invalid solution: %s",
+                result.get("error", "unknown"),
+            )
+            return -1.0
+
+        metrics = result.get("metrics", {})
+        return (
+            0.55 * metrics.get("volume_utilization", 0.0)
+            + 0.35 * metrics.get("item_coverage", 0.0)
+            + 0.10 * metrics.get("fragility_score", 0.0)
+        )
+    except ImportError:
+        logger.debug("[evaluate_quality] validator not available, skipping scoring")
+        return None
+
+
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
     """Try to evaluate solution using validator. Returns final_score or None."""
     try:
@@ -60,7 +85,7 @@ def solve(
             pallet=pallet,
             boxes=boxes,
             score_solution=lambda solution: (
-                _evaluate_score(request_dict, solution)
+                _evaluate_quality_score(request_dict, solution)
                 or len(solution.placements) / max(1, sum(b.quantity for b in boxes))
             ),
             time_budget_ms=time_budget_ms,
