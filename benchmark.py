@@ -208,41 +208,41 @@ def build_viz_data(results: list) -> list:
     for row in results:
         boxes_meta = {box["sku_id"]: box for box in row.get("request_boxes", [])}
         placements = []
-        for placement in row.get("response", {}).get("placements", []):
-            sku = boxes_meta.get(placement["sku_id"], {})
-            dimensions = placement["dimensions_placed"]
-            position = placement["position"]
+        for p in r.get("response", {}).get("placements", []):
+            sku = boxes_meta.get(p["sku_id"], {})
+            dim = p["dimensions_placed"]
+            pos = p["position"]
             placements.append(
                 {
-                    "sku_id": placement["sku_id"],
-                    "x_mm": position["x_mm"],
-                    "y_mm": position["y_mm"],
-                    "z_mm": position["z_mm"],
-                    "length_mm": dimensions["length_mm"],
-                    "width_mm": dimensions["width_mm"],
-                    "height_mm": dimensions["height_mm"],
+                    "sku_id": p["sku_id"],
+                    "x_mm": pos["x_mm"],
+                    "y_mm": pos["y_mm"],
+                    "z_mm": pos["z_mm"],
+                    "length_mm": dim["length_mm"],
+                    "width_mm": dim["width_mm"],
+                    "height_mm": dim["height_mm"],
                     "fragile": sku.get("fragile", False),
                 }
             )
-        visualizations.append(
+        viz.append(
             {
-                "pallet": row.get("request_pallet", {}),
+                "pallet": r.get("request_pallet", {}),
                 "placements": placements,
                 "meta": {
-                    "scenario": row["scenario"],
-                    "score": row.get("final_score", 0),
-                    "placed": row.get("placed", 0),
-                    "total_items": row.get("total_items", 0),
+                    "scenario": r["scenario"],
+                    "score": r.get("final_score", 0),
+                    "placed": r.get("placed", 0),
+                    "total_items": r.get("total_items", 0),
                 },
             }
         )
-    return visualizations
+    return viz
 
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark 3D Pallet Packing Solver")
     parser.add_argument(
-        "--restarts", type=int, default=len(STRATEGY_CONFIGS), help="Number of restarts"
+        "--restarts", type=int, default=10, help="Number of restarts (default: 10)"
     )
     parser.add_argument(
         "--output", "-o", default=None, help="Save detailed results to JSON file"
@@ -259,11 +259,11 @@ def main():
     if args.output:
         slim_results = [
             {
-                key: value
-                for key, value in row.items()
-                if key not in ("response", "request_pallet", "request_boxes")
+                k: v
+                for k, v in r.items()
+                if k not in ("response", "request_pallet", "request_boxes")
             }
-            for row in results
+            for r in results
         ]
         with open(args.output, "w", encoding="utf-8") as file:
             json.dump(slim_results, file, indent=2, ensure_ascii=False)
