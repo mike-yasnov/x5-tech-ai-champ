@@ -170,6 +170,8 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
     for top in placements:
         if top["weight"] <= 2.0:
             continue
+        if top["fragile"]:
+            continue
         for bottom in placements:
             if not bottom["fragile"]:
                 continue

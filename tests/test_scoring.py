@@ -54,6 +54,39 @@ def test_fragility_penalty():
     assert score_light > score_heavy
 
 
+def test_fragile_heavy_box_on_fragile_is_not_penalized():
+    """Heavy fragile boxes should not trigger the non-fragile fragility penalty."""
+    fragile_state = _make_state()
+    fragile_state.place("fragile_box", 400, 300, 200, 0, 0, 0, 1.0, fragile=True)
+    score_fragile_top = score_placement(
+        fragile_state,
+        400,
+        300,
+        200,
+        0,
+        0,
+        200,
+        5.0,
+        True,
+    )
+
+    sturdy_state = _make_state()
+    sturdy_state.place("sturdy_box", 400, 300, 200, 0, 0, 0, 1.0, fragile=False)
+    score_on_sturdy = score_placement(
+        sturdy_state,
+        400,
+        300,
+        200,
+        0,
+        0,
+        200,
+        5.0,
+        True,
+    )
+
+    assert score_fragile_top == score_on_sturdy
+
+
 def test_score_is_bounded():
     """Score should be between 0 and 1."""
     state = _make_state()

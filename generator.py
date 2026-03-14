@@ -54,6 +54,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 19.0,
         "upright": True,
         "fragile": False,
+        "stackable": True,
     },
     "sugar": {
         "desc": "Sugar 10kg",
@@ -63,6 +64,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 10.0,
         "upright": False,
         "fragile": False,
+        "stackable": True,
     },
     "water": {
         "desc": "Water Pack",
@@ -72,6 +74,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 9.2,
         "upright": True,
         "fragile": False,
+        "stackable": True,
     },
     "wine": {
         "desc": "Wine Case",
@@ -81,6 +84,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 8.0,
         "upright": True,
         "fragile": True,
+        "stackable": False,
     },
     "chips": {
         "desc": "Chips Carton",
@@ -90,6 +94,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 1.8,
         "upright": False,
         "fragile": True,
+        "stackable": True,
     },
     "eggs": {
         "desc": "Eggs 360pcs",
@@ -99,6 +104,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 22.0,
         "upright": True,
         "fragile": True,
+        "stackable": False,
     },
     "canned": {
         "desc": "Canned Peas",
@@ -108,6 +114,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 6.0,
         "upright": True,
         "fragile": False,
+        "stackable": True,
     },
 }
 
@@ -129,7 +136,7 @@ def create_box(archetype_key: str, qty_min: int, qty_max: int) -> Dict[str, Any]
         "quantity": random.randint(qty_min, qty_max),
         "strict_upright": base["upright"],
         "fragile": base["fragile"],
-        "stackable": True,
+        "stackable": base.get("stackable", True),
     }
 
 
