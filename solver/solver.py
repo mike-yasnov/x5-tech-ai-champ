@@ -13,6 +13,9 @@ sys.path.insert(0, ".")
 
 logger = logging.getLogger(__name__)
 
+# CI is ~3-4x slower than local — use conservative multiplier
+CI_SLOWDOWN_FACTOR = 3.5
+
 
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
     """Try to evaluate solution using validator. Returns final_score or None."""
@@ -37,18 +40,13 @@ def solve(
     pallet: Pallet,
     boxes: List[Box],
     request_dict: dict,
-    n_restarts: int = 20,
+    n_restarts: int = 10,
     time_budget_ms: int = 900,
 ) -> Solution:
     """Run greedy packer with multiple sort strategies and return the best solution.
 
-    Args:
-        task_id: Task identifier
-        pallet: Pallet parameters
-        boxes: List of box types
-        request_dict: Original request dict for validator
-        n_restarts: Maximum number of restarts
-        time_budget_ms: Total time budget in milliseconds
+    Uses adaptive time management: estimates CI slowdown from first strategy
+    to decide how many additional strategies to try.
     """
     t0 = time.perf_counter()
     best_solution: Optional[Solution] = None
@@ -62,11 +60,31 @@ def solve(
         task_id, n_restarts, time_budget_ms, sort_key_names,
     )
 
+    estimated_ci_time_per_strategy = 0.0
+
     for i in range(min(n_restarts, len(sort_key_names))):
         elapsed = (time.perf_counter() - t0) * 1000
-        if elapsed > time_budget_ms * 0.9:
-            logger.info("[solve] time budget approaching, stopping at restart %d", i)
-            break
+
+        if i > 0:
+            # Estimate how much time CI would need for remaining strategies
+            estimated_ci_total = elapsed * CI_SLOWDOWN_FACTOR
+            if estimated_ci_total > time_budget_ms * 0.9:
+                logger.info(
+                    "[solve] adaptive stop: est. CI time %.0fms > budget %.0fms at restart %d",
+                    estimated_ci_total, time_budget_ms * 0.9, i,
+                )
+                break
+
+            # Also check: would adding one more strategy exceed CI budget?
+            est_next = estimated_ci_total + estimated_ci_time_per_strategy
+            if est_next > time_budget_ms:
+                logger.info(
+                    "[solve] adaptive stop: next strategy would push CI to %.0fms at restart %d",
+                    est_next, i,
+                )
+                break
+
+        strategy_t0 = time.perf_counter()
 
         key_name = sort_key_names[i]
         solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name)
@@ -76,9 +94,18 @@ def solve(
             # Fallback: use placement count as proxy
             score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
 
+        strategy_ms = (time.perf_counter() - strategy_t0) * 1000
+
+        # Update per-strategy time estimate (use max for safety)
+        estimated_ci_time_per_strategy = max(
+            estimated_ci_time_per_strategy,
+            strategy_ms * CI_SLOWDOWN_FACTOR,
+        )
+
         logger.info(
-            "[solve] restart=%d sort=%s score=%.4f placed=%d",
+            "[solve] restart=%d sort=%s score=%.4f placed=%d time=%.0fms est_ci=%.0fms",
             i, key_name, score, len(solution.placements),
+            strategy_ms, strategy_ms * CI_SLOWDOWN_FACTOR,
         )
 
         if score > best_score:

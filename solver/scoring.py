@@ -6,10 +6,10 @@ from .pallet_state import PalletState
 logger = logging.getLogger(__name__)
 
 # Tunable weights
-W_HEIGHT = 0.4
-W_CONTACT = 0.3
-W_FRAGILITY = 0.2
-W_FILL = 0.1
+W_HEIGHT = 0.35
+W_CONTACT = 0.30
+W_FRAGILITY = 0.10
+W_FILL = 0.25
 
 
 def score_placement(

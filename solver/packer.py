@@ -70,17 +70,18 @@ def _sort_max_dim_desc(box: Box) -> tuple:
     return (-max(box.length_mm, box.width_mm, box.height_mm),)
 
 
+# Ordered by effectiveness across scenarios (best strategies first for adaptive budget)
 SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
-    "volume_desc": _sort_volume_desc,
-    "weight_desc": _sort_weight_desc,
-    "base_area_desc": _sort_base_area_desc,
-    "density_desc": _sort_density_desc,
-    "constrained_first": _sort_constrained_first,
-    "volume_asc": _sort_volume_asc,
-    "height_desc": _sort_height_desc,
-    "fragile_last": _sort_fragile_last,
-    "non_stackable_last": _sort_non_stackable_last,
-    "max_dim_desc": _sort_max_dim_desc,
+    "constrained_first": _sort_constrained_first,   # Best for heavy_water
+    "base_area_desc": _sort_base_area_desc,          # Best for liquid_tetris
+    "fragile_last": _sort_fragile_last,              # Best for fragile_mix
+    "volume_desc": _sort_volume_desc,                # Best for random_mixed
+    "volume_asc": _sort_volume_asc,                  # Best for cavity_fill
+    "density_desc": _sort_density_desc,              # Good for fragile_mix
+    "non_stackable_last": _sort_non_stackable_last,  # Good for random_mixed
+    "height_desc": _sort_height_desc,                # Good overall
+    "weight_desc": _sort_weight_desc,                # Secondary
+    "max_dim_desc": _sort_max_dim_desc,              # Secondary
 }
 
 
@@ -102,10 +103,12 @@ def pack_greedy(
     pallet: Pallet,
     boxes: List[Box],
     sort_key_name: str = "volume_desc",
+    time_limit_ms: int = 0,
 ) -> Solution:
     """Pack boxes greedily using Extreme Points + scoring function.
 
-    Returns a Solution with placements and unplaced items.
+    Args:
+        time_limit_ms: If > 0, stop packing when this time limit is reached.
     """
     t0 = time.perf_counter()
 
@@ -124,7 +127,24 @@ def pack_greedy(
         task_id, sort_key_name, len(instances),
     )
 
-    for box, inst_idx in instances:
+    check_interval = max(10, len(instances) // 10)  # Check time every ~10% of items
+
+    for item_idx, (box, inst_idx) in enumerate(instances):
+        # Periodic time check inside packing loop
+        if time_limit_ms > 0 and item_idx % check_interval == 0 and item_idx > 0:
+            elapsed = (time.perf_counter() - t0) * 1000
+            if elapsed > time_limit_ms:
+                logger.debug("[pack_greedy] time limit reached at item %d/%d", item_idx, len(instances))
+                # Mark remaining as unplaced
+                for remaining_box, remaining_idx in instances[item_idx:]:
+                    if state.current_weight + remaining_box.weight_kg > pallet.max_weight_kg:
+                        reason = "weight_limit_exceeded"
+                    else:
+                        reason = "no_space"
+                    unplaced_counts[remaining_box.sku_id]["count"] += 1
+                    unplaced_counts[remaining_box.sku_id]["reason"] = reason
+                break
+
         orientations = get_orientations(box)
         best_score = -1.0
         best_placement: Optional[Tuple[int, int, int, int, int, int, str]] = None

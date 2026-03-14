@@ -40,11 +40,11 @@ def _overlap_area(
 
 def _aabb_collision(a: "PlacedBox", bx1: int, by1: int, bz1: int,
                     bx2: int, by2: int, bz2: int) -> bool:
-    """Check strict AABB collision."""
+    """Check strict AABB collision. Z checked first for early exit."""
     return (
-        a.x_min < bx2 and a.x_max > bx1
+        a.z_min < bz2 and a.z_max > bz1
+        and a.x_min < bx2 and a.x_max > bx1
         and a.y_min < by2 and a.y_max > by1
-        and a.z_min < bz2 and a.z_max > bz1
     )
 
 
@@ -186,8 +186,9 @@ class PalletState:
             if not inside_any:
                 valid_eps.append(ep)
 
-        # Deduplicate and sort for deterministic ordering
-        self.extreme_points = sorted(set(valid_eps))
+        # Deduplicate, sort by (z, x, y) to prioritize lower positions, cap count
+        MAX_EPS = 80
+        self.extreme_points = sorted(set(valid_eps), key=lambda ep: (ep[2], ep[0], ep[1]))[:MAX_EPS]
 
     def get_fragile_boxes_at_top(self, z: int, x1: int, y1: int, x2: int, y2: int) -> List[PlacedBox]:
         """Find fragile boxes whose top face is at z and overlap with given XY rectangle."""
