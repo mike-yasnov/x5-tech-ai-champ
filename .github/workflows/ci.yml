@@ -99,6 +99,7 @@ jobs:
             const strategyOutput = fs.readFileSync('strategy_output.md', 'utf8');
             const results = JSON.parse(fs.readFileSync('benchmark_results.json', 'utf8'));
 
+            const allValid = results.every(r => r.valid);
             const status = allValid ? '✅' : '❌';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const vizSection = `\n\n### 🎨 3D Visualizations\n\nInteractive 3D pallet views available as build artifacts:\n\n📦 [Download visualizations](${runUrl}) → Artifacts → \`3d-pallet-visualizations\`\n\nOpen the HTML files in a browser to rotate, zoom, and inspect placements.`;
