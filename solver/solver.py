@@ -101,36 +101,31 @@ def solve(
 
     # ── Phase 2: Paper method — BuildLayers + stacking (only if budget allows) ─
     total_items = sum(b.quantity for b in boxes)
-    if _elapsed() < time_budget_ms * 0.40:
+    remaining_budget = time_budget_ms * 0.80 - _elapsed()
+    # Skip paper method for large instances or when time is tight
+    if remaining_budget > 200 and total_items <= 120:
         try:
             layers = build_layers(pallet, boxes, seed=42)
             logger.info("[solve] paper method: %d layers generated", len(layers))
 
             if layers:
-                # Try stacking — skip full validation, use placement count
-                for strategy in ["density", "box_count"]:
-                    if _elapsed() > time_budget_ms * 0.75:
-                        break
+                # Try density stacking first (best heuristic)
+                if _elapsed() < time_budget_ms * 0.65:
                     solution = stack_layers(
                         task_id, pallet, boxes, layers,
-                        sort_strategy=strategy,
+                        sort_strategy="density",
                     )
-                    # Quick evaluation without full validator for speed
-                    placed_ratio = len(solution.placements) / max(1, total_items)
-                    if placed_ratio > best_score or (best_solution and len(solution.placements) > len(best_solution.placements)):
-                        # Validate only promising solutions
-                        _update_best(solution, f"paper/{strategy}")
+                    _update_best(solution, "paper/density")
 
                 # Try ML ranking if model exists and we have time
-                if _elapsed() < time_budget_ms * 0.80:
+                if _elapsed() < time_budget_ms * 0.75:
                     ml_scores = predict_layer_scores(boxes, layers)
                     if ml_scores:
                         solution = stack_layers(
                             task_id, pallet, boxes, layers,
                             layer_scores=ml_scores,
                         )
-                        if len(solution.placements) > len(best_solution.placements if best_solution else []):
-                            _update_best(solution, "paper/ml_ranked")
+                        _update_best(solution, "paper/ml_ranked")
 
         except Exception as e:
             logger.warning("[solve] paper method failed: %s", e)
