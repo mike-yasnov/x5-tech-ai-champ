@@ -18,7 +18,9 @@ from solver.portfolio_block import (
     _fragile_staged_instances,
     _heavy_on_fragile,
     _materialize_block_candidate,
+    _should_add_legacy_baseline_candidate,
     _should_try_aggressive_fragile_staging,
+    _should_try_upright_prefill_staging,
     _should_use_fast_overload_path,
     _should_try_strict_fragility_search,
     PolicyRun,
@@ -223,6 +225,30 @@ def test_portfolio_solver_falls_back_without_model_and_stays_valid(tmp_path):
     )
     result = evaluate_solution(request_dict, solution_to_dict(solution))
     assert result["valid"] is True
+
+
+def test_legacy_baseline_gate_follows_fast_overload_fingerprint():
+    chaotic = compute_request_fingerprint(
+        generate_scenario("test_random_mixed", "random_mixed", seed=45)
+    )
+    compact = compute_request_fingerprint(
+        generate_scenario("test_exact_fit", "exact_fit", seed=46)
+    )
+
+    assert _should_add_legacy_baseline_candidate(chaotic) is True
+    assert _should_add_legacy_baseline_candidate(compact) is False
+
+
+def test_upright_prefill_gate_targets_low_volume_upright_nonstackable_mix():
+    liquid = compute_request_fingerprint(
+        generate_scenario("test_liquid_tetris", "liquid_tetris", seed=44)
+    )
+    upright_tight = compute_request_fingerprint(
+        generate_scenario("test_all_upright_tight", "private_all_upright_tight", seed=211)
+    )
+
+    assert _should_try_upright_prefill_staging(liquid) is True
+    assert _should_try_upright_prefill_staging(upright_tight) is False
 
 
 def test_legacy_greedy_strategy_regression_stays_valid():

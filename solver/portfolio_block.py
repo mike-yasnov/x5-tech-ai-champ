@@ -293,6 +293,19 @@ def solve_request(
                 )
             )
 
+    if _should_add_legacy_baseline_candidate(fingerprint):
+        elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+        budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
+        if budget_left > 35:
+            runs.append(
+                _run_legacy_portfolio(
+                    request=request,
+                    checker=checker,
+                    candidate_gen=candidate_gen,
+                    budget_ms=min(seed_limit_ms, budget_left),
+                )
+            )
+
     if not runs:
         runs.append(
             _run_legacy_portfolio(
@@ -880,6 +893,27 @@ def _run_greedy_seed_family(
                     ordered_skus=(),
                 )
             )
+    if seed_family == "liquid_fill":
+        fingerprint = compute_request_fingerprint(request)
+        if _should_try_upright_prefill_staging(fingerprint):
+            prefill_instances = _upright_prefill_instances(boxes)
+            if prefill_instances:
+                candidates.append(
+                    _policy_run_from_solution(
+                        request=request,
+                        solution=pack_instance_sequence(
+                            task_id,
+                            pallet,
+                            prefill_instances,
+                            label=f"{label}:upright_prefill",
+                            strict_fragility=strict_fragility,
+                        ),
+                        total_items=total_items,
+                        name=f"{run_name}:upright_prefill",
+                        seed_family=seed_family,
+                        ordered_skus=(),
+                    )
+                )
     run = _select_best_run(candidates)
     if apply_postprocess:
         post_budget_ms = max(0, budget_ms - int((time.perf_counter() - t0) * 1000))
@@ -892,7 +926,9 @@ def _run_greedy_seed_family(
             time_budget_left_ms=post_budget_ms,
         )
         run.seed_family = seed_family
-        if run.name.startswith(f"{run_name}:staged"):
+        if run.name.startswith(f"{run_name}:staged") or run.name.startswith(
+            f"{run_name}:upright_prefill"
+        ):
             run.ordered_skus = ()
         elif not run.ordered_skus:
             run.ordered_skus = tuple(box.sku_id for box in ordered_boxes)
@@ -996,6 +1032,65 @@ def _should_try_aggressive_fragile_staging(
         and has_fragile_light
         and heavy_fragile_qty >= 3
     )
+
+
+def _should_try_upright_prefill_staging(
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return (
+        fingerprint.total_items <= 120
+        and fingerprint.sku_count <= 4
+        and fingerprint.upright_ratio >= 0.95
+        and fingerprint.volume_ratio <= 0.55
+        and fingerprint.non_stackable_ratio >= 0.15
+        and fingerprint.fragile_ratio <= 0.45
+    )
+
+
+def _upright_prefill_instances(
+    boxes: Sequence[Box],
+) -> List[Tuple[Box, int]]:
+    sturdy = sorted(
+        [box for box in boxes if not box.fragile and box.stackable],
+        key=lambda box: (-box.weight_kg, -box.height_mm, -box.volume, -box.base_area),
+    )
+    delicate = sorted(
+        [box for box in boxes if box.fragile or not box.stackable],
+        key=lambda box: (
+            0 if not box.stackable else 1,
+            -box.height_mm,
+            -box.base_area,
+            -box.weight_kg,
+        ),
+    )
+    if not sturdy or not delicate:
+        return []
+
+    primary = sturdy[0]
+    fillers = sorted(
+        [box for box in sturdy[1:]],
+        key=lambda box: (-box.base_area, -box.volume, -box.weight_kg),
+    )
+    next_index: Dict[str, int] = {box.sku_id: 0 for box in boxes}
+    instances: List[Tuple[Box, int]] = []
+
+    def take(box: Box, count: int) -> None:
+        limit = min(count, box.quantity - next_index[box.sku_id])
+        for _ in range(limit):
+            instances.append((box, next_index[box.sku_id]))
+            next_index[box.sku_id] += 1
+
+    take(primary, primary.quantity)
+    for box in fillers:
+        take(box, max(4, int(round(box.quantity * 0.8))))
+    for box in delicate:
+        take(box, max(4, int(round(box.quantity / 3))))
+    for box in fillers:
+        take(box, box.quantity)
+    for box in delicate:
+        take(box, box.quantity)
+
+    return instances
 
 
 def _request_order_context(request: Dict[str, Any]) -> Dict[str, Any]:
@@ -1131,6 +1226,12 @@ def _should_try_small_beam(fingerprint: ScenarioFingerprint) -> bool:
         and fingerprint.sku_count >= 4
         and fingerprint.max_sku_share <= 0.60
     )
+
+
+def _should_add_legacy_baseline_candidate(
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return _should_use_fast_overload_path(fingerprint)
 
 
 def _run_small_beam_candidate(
