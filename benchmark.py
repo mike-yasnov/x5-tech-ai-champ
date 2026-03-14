@@ -245,7 +245,7 @@ def build_viz_data(results: list) -> list:
 def main():
     parser = argparse.ArgumentParser(description="Benchmark 3D Pallet Packing Solver")
     parser.add_argument(
-        "--restarts", type=int, default=10, help="Number of restarts (default: 10)"
+        "--restarts", type=int, default=30, help="Number of restarts (default: 30)"
     )
     parser.add_argument(
         "--output", "-o", default=None, help="Save detailed results to JSON file"
