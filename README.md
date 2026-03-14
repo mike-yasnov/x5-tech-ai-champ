@@ -194,6 +194,18 @@ final_score = 0.50 × volume_utilization
 
 </details>
 
+## Baseline Benchmark (отправная точка)
+
+| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
+|----------|-------|--------|----------|-----------|------------|--------|-----------|
+| heavy_water | **0.7434** | 0.7281 | 0.5978 | 1.0000 | 1.0000 | 107/179 | 389 |
+| fragile_tower | **0.6214** | 0.6382 | 0.3409 | 1.0000 | 1.0000 | 15/44 | 9 |
+| liquid_tetris | **0.6846** | 0.3992 | 1.0000 | 0.8500 | 1.0000 | 84/84 | 249 |
+| random_mixed | **0.7023** | 0.8198 | 0.4579 | 0.5500 | 1.0000 | 49/107 | 112 |
+| **Average** | **0.6879** | | | | | | |
+
+> Дата: 2026-03-14. Solver v1.0.0, greedy + multi-restart (5 стратегий), budget 900ms.
+
 ## Архитектура baseline-солвера
 
 **Extreme Points + Greedy + Multi-restart**
