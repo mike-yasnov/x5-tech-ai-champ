@@ -3,9 +3,10 @@
 import logging
 import time
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .models import Box, Pallet, Placement, Solution, UnplacedItem
+from .heuristics import SORT_KEYS, perturb_boxes, sort_boxes
 from .orientations import get_orientations
 from .pallet_state import PalletState
 from .scoring import score_placement
@@ -14,45 +15,8 @@ from . import __version__
 logger = logging.getLogger(__name__)
 
 
-# ── Sort key factories ──────────────────────────────────────────────
-
-def _sort_volume_desc(box: Box) -> tuple:
-    return (-box.volume,)
-
-
-def _sort_weight_desc(box: Box) -> tuple:
-    return (-box.weight_kg,)
-
-
-def _sort_base_area_desc(box: Box) -> tuple:
-    return (-box.base_area,)
-
-
-def _sort_density_desc(box: Box) -> tuple:
-    vol = box.volume if box.volume > 0 else 1
-    return (-box.weight_kg / vol,)
-
-
-def _sort_constrained_first(box: Box) -> tuple:
-    # Constrained items first, then by volume desc
-    priority = 0
-    if box.strict_upright:
-        priority -= 2
-    if not box.stackable:
-        priority -= 1
-    return (priority, -box.volume)
-
-
-SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
-    "volume_desc": _sort_volume_desc,
-    "weight_desc": _sort_weight_desc,
-    "base_area_desc": _sort_base_area_desc,
-    "density_desc": _sort_density_desc,
-    "constrained_first": _sort_constrained_first,
-}
-
-
 # ── Expand boxes ────────────────────────────────────────────────────
+
 
 def _expand_boxes(boxes: List[Box]) -> List[Tuple[Box, int]]:
     """Expand SKUs with quantity > 1 into individual (box, instance_index) pairs."""
@@ -65,11 +29,15 @@ def _expand_boxes(boxes: List[Box]) -> List[Tuple[Box, int]]:
 
 # ── Greedy packer ───────────────────────────────────────────────────
 
+
 def pack_greedy(
     task_id: str,
     pallet: Pallet,
     boxes: List[Box],
     sort_key_name: str = "volume_desc",
+    placement_policy: str = "balanced",
+    randomized: bool = False,
+    noise_factor: float = 0.0,
 ) -> Solution:
     """Pack boxes greedily using Extreme Points + scoring function.
 
@@ -77,19 +45,24 @@ def pack_greedy(
     """
     t0 = time.perf_counter()
 
-    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
-
-    # Sort boxes by key, then expand
-    sorted_boxes = sorted(boxes, key=sort_fn)
+    # Sort boxes by heuristic, optionally perturb for multi-start search
+    sorted_boxes = sort_boxes(boxes, sort_key_name)
+    if randomized:
+        sorted_boxes = perturb_boxes(sorted_boxes, noise_factor)
     instances = _expand_boxes(sorted_boxes)
 
     state = PalletState(pallet)
     placements: List[Placement] = []
-    unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+    unplaced_qty: Dict[str, int] = defaultdict(int)
+    unplaced_reason: Dict[str, str] = {}
 
     logger.info(
-        "[pack_greedy] task=%s sort=%s total_instances=%d",
-        task_id, sort_key_name, len(instances),
+        "[pack_greedy] task=%s sort=%s policy=%s randomized=%s total_instances=%d",
+        task_id,
+        sort_key_name,
+        placement_policy,
+        randomized,
+        len(instances),
     )
 
     for box, inst_idx in instances:
@@ -102,14 +75,29 @@ def pack_greedy(
             ex, ey, ez = ep
             for dx, dy, dz, rot_code in orientations:
                 if not state.can_place(
-                    dx, dy, dz, ex, ey, ez,
-                    box.weight_kg, box.fragile, box.stackable,
+                    dx,
+                    dy,
+                    dz,
+                    ex,
+                    ey,
+                    ez,
+                    box.weight_kg,
+                    box.fragile,
+                    box.stackable,
                 ):
                     continue
 
                 sc = score_placement(
-                    state, dx, dy, dz, ex, ey, ez,
-                    box.weight_kg, box.fragile,
+                    state,
+                    dx,
+                    dy,
+                    dz,
+                    ex,
+                    ey,
+                    ez,
+                    box.weight_kg,
+                    box.fragile,
+                    policy=placement_policy,
                 )
                 if sc > best_score:
                     best_score = sc
@@ -118,39 +106,63 @@ def pack_greedy(
         if best_placement is not None:
             dx, dy, dz, px, py, pz, rot_code = best_placement
             state.place(
-                box.sku_id, dx, dy, dz, px, py, pz,
-                box.weight_kg, box.fragile, box.stackable,
+                box.sku_id,
+                dx,
+                dy,
+                dz,
+                px,
+                py,
+                pz,
+                box.weight_kg,
+                box.fragile,
+                box.stackable,
             )
-            placements.append(Placement(
-                sku_id=box.sku_id,
-                instance_index=inst_idx,
-                x_mm=px, y_mm=py, z_mm=pz,
-                length_mm=dx, width_mm=dy, height_mm=dz,
-                rotation_code=rot_code,
-            ))
+            placements.append(
+                Placement(
+                    sku_id=box.sku_id,
+                    instance_index=inst_idx,
+                    x_mm=px,
+                    y_mm=py,
+                    z_mm=pz,
+                    length_mm=dx,
+                    width_mm=dy,
+                    height_mm=dz,
+                    rotation_code=rot_code,
+                )
+            )
         else:
             # Determine reason
             if state.current_weight + box.weight_kg > pallet.max_weight_kg:
                 reason = "weight_limit_exceeded"
             else:
                 reason = "no_space"
-            unplaced_counts[box.sku_id]["count"] += 1
-            unplaced_counts[box.sku_id]["reason"] = reason
+            unplaced_qty[box.sku_id] += 1
+            unplaced_reason[box.sku_id] = reason
             logger.debug(
                 "[pack_greedy] unplaced sku=%s instance=%d reason=%s",
-                box.sku_id, inst_idx, reason,
+                box.sku_id,
+                inst_idx,
+                reason,
             )
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
     unplaced = [
-        UnplacedItem(sku_id=sid, quantity_unplaced=info["count"], reason=info["reason"])
-        for sid, info in unplaced_counts.items()
+        UnplacedItem(
+            sku_id=sid,
+            quantity_unplaced=qty,
+            reason=unplaced_reason.get(sid, "no_space"),
+        )
+        for sid, qty in unplaced_qty.items()
     ]
 
     logger.info(
-        "[pack_greedy] done sort=%s placed=%d unplaced=%d time=%dms",
-        sort_key_name, len(placements), sum(u.quantity_unplaced for u in unplaced), elapsed_ms,
+        "[pack_greedy] done sort=%s policy=%s placed=%d unplaced=%d time=%dms",
+        sort_key_name,
+        placement_policy,
+        len(placements),
+        sum(u.quantity_unplaced for u in unplaced),
+        elapsed_ms,
     )
 
     return Solution(
