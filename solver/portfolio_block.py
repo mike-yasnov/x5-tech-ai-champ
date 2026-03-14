@@ -122,6 +122,18 @@ class PolicyRun:
 
 
 @dataclass(frozen=True)
+class FragilityConflict:
+    top_signature: Tuple[str, int, int, int, int]
+    bottom_signature: Tuple[str, int, int, int, int]
+    x_min: int
+    y_min: int
+    x_max: int
+    y_max: int
+    z_max: int
+    overlap_area: float
+
+
+@dataclass(frozen=True)
 class _BlockSpec:
     sku_id: str
     placed_dims: Tuple[int, int, int]
@@ -1024,7 +1036,18 @@ def _repair_candidate_run(
     if budget_ms <= 0 or not run.placements:
         return run
 
+    base_fragility_score = _fragility_score_from_placements(run.placements)
     candidates = [run]
+    if base_fragility_score < 0.999:
+        candidates.append(
+            _repair_fragility_micro_repack(
+                request=request,
+                run=run,
+                checker=checker,
+                candidate_gen=candidate_gen,
+                budget_ms=max(25, budget_ms // 2),
+            )
+        )
     if run.block_steps:
         candidates.append(
             _repair_run(
@@ -1045,7 +1068,144 @@ def _repair_candidate_run(
             budget_ms=budget_ms,
         )
     )
-    return _select_best_run(candidates)
+    best = max(
+        candidates,
+        key=lambda candidate: _repair_selection_key(candidate, base_fragility_score),
+    )
+    if (
+        _repair_selection_key(best, base_fragility_score)
+        <= _repair_selection_key(run, base_fragility_score)
+    ):
+        return run
+    return best
+
+
+def _repair_selection_key(
+    run: PolicyRun,
+    base_fragility_score: float,
+) -> Tuple[float, int]:
+    fragility_score = _fragility_score_from_placements(run.placements)
+    fragility_bonus = 0.0
+    if fragility_score > base_fragility_score + 1e-9:
+        fragility_bonus = 0.30 * (fragility_score - base_fragility_score)
+    return (run.score + fragility_bonus, -run.elapsed_ms)
+
+
+def _repair_fragility_micro_repack(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    budget_ms: int,
+) -> PolicyRun:
+    if budget_ms <= 0 or len(run.placements) < 3 or len(run.placements) > 70:
+        return run
+
+    conflicts = _fragility_conflicts(run.placements)
+    if not conflicts:
+        return run
+
+    clusters = _fragility_conflict_clusters(run.placements, conflicts)
+    if not clusters:
+        return run
+
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    deadline = time.perf_counter() + budget_ms / 1000.0
+    candidate_runs: List[PolicyRun] = [run]
+    cluster_sets = [cluster["signatures"] for cluster in clusters[:2]]
+    if len(cluster_sets) >= 2:
+        combined = set().union(*cluster_sets)
+        if combined:
+            cluster_sets.append(combined)
+
+    for signatures in cluster_sets:
+        if time.perf_counter() >= deadline:
+            break
+        kept = [
+            placement
+            for placement in run.placements
+            if _placement_signature(placement) not in signatures
+        ]
+        if len(kept) == len(run.placements):
+            continue
+
+        state, ep_manager = _rebuild_state(request, kept)
+        remaining = _remaining_from_placements(request["boxes"], kept)
+        runs = _local_repack_runs(
+            request=request,
+            state=state,
+            ep_manager=ep_manager,
+            remaining=remaining,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            total_items=total_items,
+            deadline=deadline,
+            base_name=f"{run.name}+micro_repack",
+        )
+        candidate_runs.extend(runs)
+
+    best = max(
+        candidate_runs,
+        key=lambda candidate: _repair_selection_key(
+            candidate,
+            _fragility_score_from_placements(run.placements),
+        ),
+    )
+    if (
+        _repair_selection_key(best, _fragility_score_from_placements(run.placements))
+        <= _repair_selection_key(run, _fragility_score_from_placements(run.placements))
+    ):
+        return run
+    return best
+
+
+def _local_repack_runs(
+    request: Dict[str, Any],
+    state: PalletState,
+    ep_manager: ExtremePointManager,
+    remaining: List[RemainingItem],
+    checker: FeasibilityChecker,
+    candidate_gen: CandidateGenerator,
+    total_items: int,
+    deadline: float,
+    base_name: str,
+) -> List[PolicyRun]:
+    if time.perf_counter() >= deadline:
+        return []
+
+    runs: List[PolicyRun] = []
+    rebuild_specs = (
+        ("fragile_last", 2),
+        ("coverage_fill", 1),
+        ("foundation", 1),
+    )
+    for policy_name, max_block_span in rebuild_specs:
+        if time.perf_counter() >= deadline:
+            break
+        run = _construct_with_policy(
+            request=request,
+            policy_name=policy_name,
+            state=state.copy(),
+            ep_manager=ep_manager.copy(),
+            remaining=_clone_remaining(remaining),
+            checker=checker,
+            deadline=deadline,
+            ranker=None,
+            extractor=None,
+            max_block_span=max_block_span,
+        )
+        run.name = f"{base_name}:{policy_name}"
+        post_budget_ms = max(0, int((deadline - time.perf_counter()) * 1000))
+        run = _maybe_postprocess_run(
+            request=request,
+            run=run,
+            checker=checker,
+            candidate_gen=candidate_gen,
+            total_items=total_items,
+            time_budget_left_ms=post_budget_ms,
+        )
+        runs.append(run)
+    return runs
 
 
 def _repair_remove_and_refill(
@@ -1107,16 +1267,155 @@ def _fragility_offender_signatures(
     placements: Sequence[PlacedBox],
 ) -> set[Tuple[str, int, int, int, int]]:
     offenders: set[Tuple[str, int, int, int, int]] = set()
+    for conflict in _fragility_conflicts(placements):
+        offenders.add(conflict.top_signature)
+        offenders.add(conflict.bottom_signature)
+    return offenders
+
+
+def _fragility_conflicts(
+    placements: Sequence[PlacedBox],
+) -> List[FragilityConflict]:
+    conflicts: List[FragilityConflict] = []
     for top in placements:
         if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
             continue
         for bottom in placements:
             if not bottom.fragile:
                 continue
-            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON and top.aabb.overlap_area_xy(bottom.aabb) > 0:
-                offenders.add(_placement_signature(top))
-                offenders.add(_placement_signature(bottom))
-    return offenders
+            if abs(top.aabb.z_min - bottom.aabb.z_max) >= EPSILON:
+                continue
+            overlap_area = top.aabb.overlap_area_xy(bottom.aabb)
+            if overlap_area <= 0:
+                continue
+            conflicts.append(
+                FragilityConflict(
+                    top_signature=_placement_signature(top),
+                    bottom_signature=_placement_signature(bottom),
+                    x_min=min(top.aabb.x_min, bottom.aabb.x_min),
+                    y_min=min(top.aabb.y_min, bottom.aabb.y_min),
+                    x_max=max(top.aabb.x_max, bottom.aabb.x_max),
+                    y_max=max(top.aabb.y_max, bottom.aabb.y_max),
+                    z_max=max(top.aabb.z_max, bottom.aabb.z_max),
+                    overlap_area=overlap_area,
+                )
+            )
+    return conflicts
+
+
+def _fragility_conflict_clusters(
+    placements: Sequence[PlacedBox],
+    conflicts: Sequence[FragilityConflict],
+) -> List[Dict[str, Any]]:
+    if not conflicts:
+        return []
+
+    placement_map = {
+        _placement_signature(placement): placement for placement in placements
+    }
+    remaining = list(conflicts)
+    clusters: List[Dict[str, Any]] = []
+    while remaining:
+        current = remaining.pop(0)
+        cluster_signatures = {current.top_signature, current.bottom_signature}
+        x_min = current.x_min
+        y_min = current.y_min
+        x_max = current.x_max
+        y_max = current.y_max
+        overlap_sum = current.overlap_area
+        changed = True
+
+        while changed:
+            changed = False
+            keep: List[FragilityConflict] = []
+            for conflict in remaining:
+                if (
+                    conflict.top_signature in cluster_signatures
+                    or conflict.bottom_signature in cluster_signatures
+                    or _rectangles_overlap_xy(
+                        x_min,
+                        y_min,
+                        x_max,
+                        y_max,
+                        conflict.x_min,
+                        conflict.y_min,
+                        conflict.x_max,
+                        conflict.y_max,
+                    )
+                ):
+                    cluster_signatures.add(conflict.top_signature)
+                    cluster_signatures.add(conflict.bottom_signature)
+                    x_min = min(x_min, conflict.x_min)
+                    y_min = min(y_min, conflict.y_min)
+                    x_max = max(x_max, conflict.x_max)
+                    y_max = max(y_max, conflict.y_max)
+                    overlap_sum += conflict.overlap_area
+                    changed = True
+                else:
+                    keep.append(conflict)
+            remaining = keep
+
+        expanded = set(cluster_signatures)
+        for signature, placement in placement_map.items():
+            overlap_area = _rectangle_overlap_area_xy(
+                x_min,
+                y_min,
+                x_max,
+                y_max,
+                placement.aabb.x_min,
+                placement.aabb.y_min,
+                placement.aabb.x_max,
+                placement.aabb.y_max,
+            )
+            if overlap_area <= 0:
+                continue
+            if overlap_area >= placement.aabb.base_area() * 0.30:
+                expanded.add(signature)
+
+        clusters.append(
+            {
+                "signatures": expanded,
+                "overlap_sum": overlap_sum,
+                "size": len(expanded),
+            }
+        )
+
+    clusters.sort(
+        key=lambda cluster: (cluster["overlap_sum"], cluster["size"]),
+        reverse=True,
+    )
+    return clusters
+
+
+def _rectangles_overlap_xy(
+    ax_min: int,
+    ay_min: int,
+    ax_max: int,
+    ay_max: int,
+    bx_min: int,
+    by_min: int,
+    bx_max: int,
+    by_max: int,
+) -> bool:
+    return (
+        min(ax_max, bx_max) - max(ax_min, bx_min) > 0
+        and min(ay_max, by_max) - max(ay_min, by_min) > 0
+    )
+
+
+def _rectangle_overlap_area_xy(
+    ax_min: int,
+    ay_min: int,
+    ax_max: int,
+    ay_max: int,
+    bx_min: int,
+    by_min: int,
+    bx_max: int,
+    by_max: int,
+) -> int:
+    overlap_x = max(0, min(ax_max, bx_max) - max(ax_min, bx_min))
+    overlap_y = max(0, min(ay_max, by_max) - max(ay_min, by_min))
+    return overlap_x * overlap_y
 
 
 def _placement_keep_score(

@@ -10,6 +10,8 @@ from solver.hybrid.pallet_state import PalletState, PlacedBox
 from solver.models import Box, Pallet, solution_to_dict
 from solver.portfolio_block import (
     _BlockSpec,
+    _fragility_conflict_clusters,
+    _fragility_conflicts,
     _generate_exact_orderings,
     _fragile_staged_instances,
     _materialize_block_candidate,
@@ -328,3 +330,63 @@ def test_strict_fragility_search_gates_on_near_fit_heavy_fragile_requests():
         ordered_skus=tuple(box["sku_id"] for box in tower_request["boxes"]),
     )
     assert _should_try_strict_fragility_search(tower_request, tower_fp, tower_run) is False
+
+
+def test_fragility_conflict_clusters_capture_entire_xy_column():
+    placements = [
+        PlacedBox(
+            sku_id="FRAG_BASE",
+            instance_index=0,
+            aabb=AABB(0, 0, 0, 300, 300, 200),
+            weight=3.0,
+            fragile=True,
+            stackable=True,
+            strict_upright=False,
+            rotation_code="LWH",
+            placed_dims=(300, 300, 200),
+        ),
+        PlacedBox(
+            sku_id="HEAVY_TOP",
+            instance_index=0,
+            aabb=AABB(0, 0, 200, 300, 300, 400),
+            weight=8.0,
+            fragile=False,
+            stackable=True,
+            strict_upright=False,
+            rotation_code="LWH",
+            placed_dims=(300, 300, 200),
+        ),
+        PlacedBox(
+            sku_id="HEAVY_CAP",
+            instance_index=1,
+            aabb=AABB(0, 0, 400, 300, 300, 600),
+            weight=8.0,
+            fragile=False,
+            stackable=True,
+            strict_upright=False,
+            rotation_code="LWH",
+            placed_dims=(300, 300, 200),
+        ),
+        PlacedBox(
+            sku_id="SIDE_SAFE",
+            instance_index=0,
+            aabb=AABB(300, 0, 0, 600, 300, 200),
+            weight=8.0,
+            fragile=False,
+            stackable=True,
+            strict_upright=False,
+            rotation_code="LWH",
+            placed_dims=(300, 300, 200),
+        ),
+    ]
+
+    conflicts = _fragility_conflicts(placements)
+    clusters = _fragility_conflict_clusters(placements, conflicts)
+
+    assert len(conflicts) == 1
+    assert len(clusters) == 1
+    signatures = clusters[0]["signatures"]
+    assert ("FRAG_BASE", 0, 0, 0, 0) in signatures
+    assert ("HEAVY_TOP", 0, 0, 0, 200) in signatures
+    assert ("HEAVY_CAP", 1, 0, 0, 400) in signatures
+    assert ("SIDE_SAFE", 0, 300, 0, 0) not in signatures
