@@ -19,17 +19,39 @@ def _rebuild_state_from_placements(
     pallet: Pallet,
     placements: List[Placement],
     boxes_meta: Dict[str, Box],
-) -> PalletState:
-    """Rebuild PalletState from a list of placements."""
+) -> Tuple[PalletState, List[Placement], List[Tuple["Box", int]]]:
+    """Rebuild PalletState from a list of placements.
+
+    Validates each placement with can_place() to catch floating boxes
+    that lost support after destroy. Invalid placements are returned
+    as orphans to be added to the repair pool.
+
+    Returns (state, valid_placements, orphan_items).
+    """
+    # Sort by z so lower boxes are placed first (support order)
+    sorted_ps = sorted(placements, key=lambda p: p.z_mm)
     state = PalletState(pallet)
-    for p in placements:
+    valid = []
+    orphans: List[Tuple[Box, int]] = []
+
+    for p in sorted_ps:
         box = boxes_meta[p.sku_id]
-        state.place(
-            p.sku_id, p.length_mm, p.width_mm, p.height_mm,
+        if state.can_place(
+            p.length_mm, p.width_mm, p.height_mm,
             p.x_mm, p.y_mm, p.z_mm,
             box.weight_kg, box.fragile, box.stackable,
-        )
-    return state
+        ):
+            state.place(
+                p.sku_id, p.length_mm, p.width_mm, p.height_mm,
+                p.x_mm, p.y_mm, p.z_mm,
+                box.weight_kg, box.fragile, box.stackable,
+            )
+            valid.append(p)
+        else:
+            orphans.append((box, p.instance_index))
+            logger.debug("[lns] orphan: %s at z=%d (lost support after destroy)", p.sku_id, p.z_mm)
+
+    return state, valid, orphans
 
 
 def _repair_greedy(
@@ -185,13 +207,17 @@ def lns_optimize(
             else:
                 kept_placements.append(p)
 
-        # Add previously unplaced items to repair pool
-        repair_pool = destroyed_items + list(initial_unplaced_items)
-        # Shuffle repair pool for diversity
-        rng.shuffle(repair_pool)
+        # Rebuild state from kept placements (validates support)
+        state, kept_placements, orphan_items = _rebuild_state_from_placements(
+            pallet, kept_placements, boxes_meta)
 
-        # Rebuild state from kept placements
-        state = _rebuild_state_from_placements(pallet, kept_placements, boxes_meta)
+        # Build repair pool: orphans first (they had valid positions), then destroyed + unplaced
+        repair_pool = orphan_items + destroyed_items + list(initial_unplaced_items)
+        # Only shuffle destroyed + unplaced portion (keep orphans first for priority)
+        non_orphan_start = len(orphan_items)
+        non_orphan = repair_pool[non_orphan_start:]
+        rng.shuffle(non_orphan)
+        repair_pool = repair_pool[:non_orphan_start] + non_orphan
 
         # Rotate weight profiles across iterations for diversity
         profiles = ["default", "contact_heavy", "fill_heavy"]

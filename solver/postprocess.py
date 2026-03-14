@@ -211,8 +211,23 @@ def try_insert_unplaced(
     if not unplaced_items:
         return placements, []
 
-    # Sort unplaced by volume desc (try to fit big items first)
-    unplaced_items.sort(key=lambda x: -x[0].volume)
+    # Phase-aware ordering: place items that build stable base first
+    # non-fragile stackable → non-fragile heavy → fragile heavy → fragile light → non-stackable
+    def _insert_priority(item):
+        box = item[0]
+        if not box.fragile and box.stackable:
+            tier = 0  # Best base items
+        elif not box.fragile and box.weight_kg > 2.0:
+            tier = 1  # Heavy non-fragile
+        elif box.fragile and box.weight_kg > 2.0:
+            tier = 2  # Heavy fragile
+        elif box.fragile:
+            tier = 3  # Light fragile (place on top)
+        else:
+            tier = 4  # Non-stackable (place last, nothing goes on them)
+        return (tier, -box.volume)
+
+    unplaced_items.sort(key=_insert_priority)
 
     # Rebuild state
     state = PalletState(pallet)
@@ -888,6 +903,20 @@ def postprocess_solution(
                     quantity_unplaced=box.quantity - placed,
                     reason="no_space",
                 ))
+
+    # Step 4: Second fragile reorder after insert (insert may create new violations)
+    post_insert_violations = _find_fragility_violations(placements, boxes_meta)
+    if post_insert_violations:
+        elapsed2 = (_time.perf_counter() - t0) * 1000
+        remaining2 = time_budget_ms - elapsed2
+        if remaining2 > 30:
+            pre_count = len(post_insert_violations)
+            placements = reorder_fragile(pallet, placements, boxes_meta,
+                                         time_budget_ms=min(int(remaining2 * 0.5), 50))
+            post_count = len(_find_fragility_violations(placements, boxes_meta))
+            if post_count < pre_count:
+                logger.info("[postprocess] second reorder_fragile: %d->%d violations",
+                            pre_count, post_count)
 
     # Step 5: Compact again after insertions (only if safe)
     if len(placements) > len(solution.placements):
