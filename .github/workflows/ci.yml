@@ -57,6 +57,11 @@ jobs:
         run: |
           python benchmark.py --output benchmark_results.json --viz viz 2>/dev/null | tee benchmark_output.md
 
+      - name: Run constraints benchmark
+        id: constraints_bench
+        run: |
+          python benchmark_constraints.py --output constraints_results.json 2>/dev/null | tee constraints_output.md
+
       - name: Upload 3D visualizations
         uses: actions/upload-artifact@v4
         with:
@@ -75,6 +80,9 @@ jobs:
           echo "# Solver Benchmark" >> "$GITHUB_STEP_SUMMARY"
           cat benchmark_output.md >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "# Constraint Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          cat constraints_output.md >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "# Strategy Benchmark (Top 8 per scenario)" >> "$GITHUB_STEP_SUMMARY"
           cat strategy_output.md >> "$GITHUB_STEP_SUMMARY"
 
@@ -85,6 +93,8 @@ jobs:
           path: |
             benchmark_results.json
             benchmark_output.md
+            constraints_results.json
+            constraints_output.md
             strategy_results.json
             strategy_output.md
             strategy_output_full.md
@@ -96,14 +106,17 @@ jobs:
           script: |
             const fs = require('fs');
             const output = fs.readFileSync('benchmark_output.md', 'utf8');
+            const constraintsOutput = fs.readFileSync('constraints_output.md', 'utf8');
             const strategyOutput = fs.readFileSync('strategy_output.md', 'utf8');
             const results = JSON.parse(fs.readFileSync('benchmark_results.json', 'utf8'));
+            const constraintsResults = JSON.parse(fs.readFileSync('constraints_results.json', 'utf8'));
 
             const allValid = results.every(r => r.valid);
-            const status = allValid ? '✅' : '❌';
+            const constraintsAllPass = constraintsResults.every(r => r.verdict === 'PASS');
+            const status = allValid && constraintsAllPass ? '✅' : '❌';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const vizSection = `\n\n### 🎨 3D Visualizations\n\nInteractive 3D pallet views available as build artifacts:\n\n📦 [Download visualizations](${runUrl}) → Artifacts → \`3d-pallet-visualizations\`\n\nOpen the HTML files in a browser to rotate, zoom, and inspect placements.`;
-            const body = `### ${status} Benchmark Results\n\n${output}\n\n### Strategy Comparison (Top 8 per scenario)\n\n${strategyOutput}\n\nFull strategy benchmark is attached in CI artifacts as \`strategy_results.json\` and \`strategy_output_full.md\`. ${vizSection}\n\n---\n*Automated benchmark by CI*`;
+            const body = `### ${status} Benchmark Results\n\n${output}\n\n### Constraint Benchmark\n\n${constraintsOutput}\n\n### Strategy Comparison (Top 8 per scenario)\n\n${strategyOutput}\n\nFull benchmark outputs are attached in CI artifacts as \`benchmark_results.json\`, \`constraints_results.json\`, \`strategy_results.json\`, and \`strategy_output_full.md\`. ${vizSection}\n\n---\n*Automated benchmark by CI*`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
