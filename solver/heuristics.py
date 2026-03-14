@@ -146,12 +146,15 @@ STRATEGY_CONFIGS: List[StrategyConfig] = [
     StrategyConfig("volume__balanced", "volume_desc", "balanced"),
     StrategyConfig("volume__dbfl", "volume_desc", "dbfl"),
     StrategyConfig("volume__max_contact", "volume_desc", "max_contact"),
+    StrategyConfig("volume__fragile_safe", "volume_desc", "fragile_safe"),
     StrategyConfig("area__balanced", "base_area_desc", "balanced"),
     StrategyConfig("area__max_support", "base_area_desc", "max_support"),
     StrategyConfig("area__max_contact", "base_area_desc", "max_contact"),
+    StrategyConfig("area__fragile_safe", "base_area_desc", "fragile_safe"),
     StrategyConfig("weight__balanced", "weight_desc", "balanced"),
     StrategyConfig("weight__center_stable", "weight_desc", "center_stable"),
     StrategyConfig("weight__fragile_last", "fragile_last", "center_stable"),
+    StrategyConfig("weight__fragile_safe", "fragile_last", "fragile_safe"),
     StrategyConfig("density__center_stable", "density_desc", "center_stable"),
     StrategyConfig("density__max_contact", "density_desc", "max_contact"),
     StrategyConfig("constrained__max_support", "constrained_first", "max_support"),
@@ -161,8 +164,10 @@ STRATEGY_CONFIGS: List[StrategyConfig] = [
     StrategyConfig("stackable__max_support", "stackable_first", "max_support"),
     StrategyConfig("layer__min_height", "layer_height_desc", "min_height"),
     StrategyConfig("layer__max_support", "layer_height_desc", "max_support"),
+    StrategyConfig("layer__fragile_safe", "layer_height_desc", "fragile_safe"),
     StrategyConfig("homogeneous__dbfl", "homogeneous", "dbfl"),
     StrategyConfig("homogeneous__max_support", "homogeneous", "max_support"),
+    StrategyConfig("homogeneous__fragile_safe", "homogeneous", "fragile_safe"),
     StrategyConfig("upright__max_support", "upright_first", "max_support"),
     StrategyConfig("slender__min_height", "slenderness_desc", "min_height"),
     StrategyConfig("slender__max_support", "slenderness_desc", "max_support"),
@@ -224,6 +229,8 @@ def select_strategy_configs(
                 "weight__fragile_last",
                 "stackable__max_support",
                 "area__max_support",
+                "area__fragile_safe",
+                "weight__fragile_safe",
             ]
         )
 
@@ -268,6 +275,7 @@ def select_strategy_configs(
                 "volume__max_contact",
                 "perimeter__max_contact",
                 "slender__min_height",
+                "homogeneous__fragile_safe",
             ]
         )
 
