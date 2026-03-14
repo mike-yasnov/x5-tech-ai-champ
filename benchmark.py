@@ -87,24 +87,25 @@ def run_benchmark(n_restarts: int | None = None, time_budget_ms: int = 5000) -> 
 
         response_dict = solution_to_dict(solution)
         eval_result = evaluate_solution(request_dict, response_dict)
-        total_items = sum(box["quantity"] for box in request_dict["boxes"])
 
-        results.append(
-            {
-                "scenario": scenario_type,
-                "valid": eval_result.get("valid", False),
-                "final_score": eval_result.get("final_score", 0.0),
-                "metrics": eval_result.get("metrics", {}),
-                "placed": len(solution.placements),
-                "total_items": total_items,
-                "solve_time_ms": solution.solve_time_ms,
-                "wall_time_ms": wall_time_ms,
-                "error": eval_result.get("error"),
-                "response": response_dict,
-                "request_pallet": request_dict["pallet"],
-                "request_boxes": request_dict["boxes"],
-            }
-        )
+        total_items = sum(b["quantity"] for b in request_dict["boxes"])
+
+        entry = {
+            "scenario": scenario_type,
+            "valid": eval_result.get("valid", False),
+            "final_score": eval_result.get("final_score", 0.0),
+            "metrics": eval_result.get("metrics", {}),
+            "constraint_checks": eval_result.get("constraint_checks", {}),
+            "placed": len(solution.placements),
+            "total_items": total_items,
+            "solve_time_ms": solution.solve_time_ms,
+            "wall_time_ms": wall_time_ms,
+            "error": eval_result.get("error"),
+            "response": response_dict,
+            "request_pallet": request_dict["pallet"],
+            "request_boxes": request_dict["boxes"],
+        }
+        results.append(entry)
 
     return results
 
@@ -163,7 +164,41 @@ def format_markdown(results: list) -> str:
         if results
         else 0
     )
-    lines.append(f"**Overall average: {overall_average:.4f}**")
+    lines.append(f"**Overall average: {overall_avg:.4f}**")
+
+    # Constraint compliance table
+    lines.append("")
+    lines.append("### Constraint Compliance")
+    lines.append("")
+    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
+    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
+    for r in results:
+        cc = r.get("constraint_checks", {})
+        if not r["valid"]:
+            lines.append(f"| {r['scenario']} | FAIL | - | - | - | - | - | - |")
+            continue
+
+        def _fmt(v):
+            if v is True:
+                return "PASS"
+            if v == "pass":
+                return "PASS"
+            if v == "n/a":
+                return "n/a"
+            return str(v)
+
+        lines.append(
+            f"| {r['scenario']} "
+            f"| {_fmt(cc.get('bounds', '?'))} "
+            f"| {_fmt(cc.get('no_collision', '?'))} "
+            f"| {_fmt(cc.get('support_60pct', '?'))} "
+            f"| {_fmt(cc.get('weight_limit', '?'))} "
+            f"| {_fmt(cc.get('strict_upright', '?'))} "
+            f"| {_fmt(cc.get('stackable', '?'))} "
+            f"| {cc.get('fragility_violations', '?')} |"
+        )
+    lines.append("")
+
     return "\n".join(lines)
 
 
