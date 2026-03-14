@@ -1,6 +1,7 @@
 """Multi-restart solver: runs greedy packer with different sort strategies."""
 
 import logging
+import os
 import sys
 import time
 from typing import List, Optional
@@ -14,8 +15,10 @@ sys.path.insert(0, ".")
 
 logger = logging.getLogger(__name__)
 
-# CI is ~3-4x slower than local — use conservative multiplier
-CI_SLOWDOWN_FACTOR = 3.5
+# Auto-detect CI: on CI, elapsed time = CI time (factor=1.0)
+# Locally, estimate CI time with slowdown factor
+_IS_CI = os.environ.get("CI", "").lower() in ("true", "1", "yes") or os.environ.get("GITHUB_ACTIONS") == "true"
+CI_SLOWDOWN_FACTOR = 1.0 if _IS_CI else 3.5
 
 
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
