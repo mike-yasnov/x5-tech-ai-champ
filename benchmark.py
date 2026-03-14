@@ -30,6 +30,7 @@ PROJECT_SCENARIOS = [
     ("fragile_mix", 47),
     ("support_tetris", 48),
     ("cavity_fill", 49),
+    ("count_preference", 50),
 ]
 
 SCENARIOS = ORGANIZER_SCENARIOS + PROJECT_SCENARIOS
