@@ -31,6 +31,8 @@ from .scenario_selector import (
 
 
 logger = logging.getLogger(__name__)
+_SELECTOR_CACHE: Dict[str, Optional[ScenarioSelector]] = {}
+_RANKER_CACHE: Dict[str, Tuple[Optional[BlockRanker], Optional[BlockFeatureExtractor]]] = {}
 
 SOLVER_VERSION = "portfolio-block-v0.2"
 CONSTRUCTIVE_POLICIES = ("foundation", "fragile_last", "coverage_fill")
@@ -142,11 +144,15 @@ def solve_request(
     model_dir: str | Path = "models",
     time_budget_ms: int = 900,
 ) -> Dict[str, Any]:
-    t0 = time.perf_counter()
     checker, candidate_gen, total_items = _init_common_components(request)
     fingerprint = compute_request_fingerprint(request)
-    selector = _load_optional_selector(model_dir)
-    ranker, extractor = _load_optional_ranker(model_dir)
+    selector = _load_optional_selector(model_dir) if fingerprint.total_items <= 120 else None
+    ranker, extractor = (
+        _load_optional_ranker(model_dir)
+        if fingerprint.total_items <= 120
+        else (None, None)
+    )
+    t0 = time.perf_counter()
     proxy_upper_bound = _proxy_upper_bound(request)
 
     seed_limit_ms = min(220, max(120, time_budget_ms // 4))
@@ -415,19 +421,30 @@ def _remaining_from_placements(
 def _load_optional_ranker(
     model_dir: str | Path,
 ) -> Tuple[Optional[BlockRanker], Optional[BlockFeatureExtractor]]:
+    cache_key = str(Path(model_dir).resolve())
+    if cache_key in _RANKER_CACHE:
+        return _RANKER_CACHE[cache_key]
     meta = _read_json(Path(model_dir) / "meta.json")
     if meta and not meta.get("runtime_enabled", False):
-        return None, None
+        _RANKER_CACHE[cache_key] = (None, None)
+        return _RANKER_CACHE[cache_key]
     ranker = BlockRanker(model_dir=model_dir)
     if ranker.load():
-        return ranker, BlockFeatureExtractor()
-    return None, None
+        _RANKER_CACHE[cache_key] = (ranker, BlockFeatureExtractor())
+        return _RANKER_CACHE[cache_key]
+    _RANKER_CACHE[cache_key] = (None, None)
+    return _RANKER_CACHE[cache_key]
 
 
 def _load_optional_selector(model_dir: str | Path) -> Optional[ScenarioSelector]:
+    cache_key = str(Path(model_dir).resolve())
+    if cache_key in _SELECTOR_CACHE:
+        return _SELECTOR_CACHE[cache_key]
     selector = ScenarioSelector(model_dir=model_dir)
     if selector.load():
+        _SELECTOR_CACHE[cache_key] = selector
         return selector
+    _SELECTOR_CACHE[cache_key] = None
     return None
 
 
@@ -446,6 +463,8 @@ def _rank_seed_families(
     selector: Optional[ScenarioSelector],
 ) -> List[str]:
     fallback = _fallback_seed_order(fingerprint)
+    if fingerprint.total_items > 120:
+        return fallback
     if selector is None or not selector.is_trained:
         return fallback
 
@@ -526,11 +545,14 @@ def _blend_seed_orders(
 
     if not allow_block_top3:
         scores["block_structured"] = scores.get("block_structured", 0.0) - total
-    if (
+    coverage_tie_supported = (
         fingerprint.volume_ratio >= 0.95
         and fingerprint.total_items <= 12
-    ):
+    )
+    if coverage_tie_supported:
         scores["coverage_tie"] = scores.get("coverage_tie", 0.0) + 1.5
+    else:
+        scores["coverage_tie"] = scores.get("coverage_tie", 0.0) - total
 
     return sorted(SEED_FAMILIES, key=lambda seed_family: scores.get(seed_family, 0.0), reverse=True)
 
