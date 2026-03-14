@@ -3,10 +3,14 @@
 import argparse
 import json
 import logging
+import os
 import sys
 
 from .models import load_request, solution_to_dict
 from .solver import solve
+
+_IS_CI = os.environ.get("CI", "").lower() in ("true", "1", "yes") or os.environ.get("GITHUB_ACTIONS") == "true"
+_DEFAULT_BUDGET = 500 if _IS_CI else 900
 
 
 def main():
@@ -27,8 +31,8 @@ def main():
         help="Number of restarts (default: 30)",
     )
     parser.add_argument(
-        "--time-budget", type=int, default=900,
-        help="Time budget per task in ms (default: 900)",
+        "--time-budget", type=int, default=_DEFAULT_BUDGET,
+        help="Time budget per task in ms (default: 500 on CI, 900 locally)",
     )
     parser.add_argument(
         "--log-level", default="INFO",

@@ -12,6 +12,9 @@ import os
 import sys
 import time
 
+_IS_CI = os.environ.get("CI", "").lower() in ("true", "1", "yes") or os.environ.get("GITHUB_ACTIONS") == "true"
+_DEFAULT_BUDGET = 500 if _IS_CI else 900
+
 from generator import generate_scenario
 from solver.packer import SORT_KEYS
 from validator import evaluate_solution
@@ -65,7 +68,7 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 900) -> list:
+def run_benchmark(n_restarts: int = 10, time_budget_ms: int = _DEFAULT_BUDGET) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
