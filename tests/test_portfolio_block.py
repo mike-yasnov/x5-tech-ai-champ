@@ -8,7 +8,11 @@ from solver.hybrid.feasibility import FeasibilityChecker
 from solver.hybrid.geometry import AABB
 from solver.hybrid.pallet_state import PalletState, PlacedBox
 from solver.models import Box, Pallet, solution_to_dict
-from solver.portfolio_block import _BlockSpec, _materialize_block_candidate
+from solver.portfolio_block import (
+    _BlockSpec,
+    _fragile_staged_instances,
+    _materialize_block_candidate,
+)
 from solver.solver import solve
 from validator import evaluate_solution
 
@@ -205,3 +209,19 @@ def test_legacy_greedy_strategy_regression_stays_valid():
     result = evaluate_solution(request_dict, solution_to_dict(solution))
     assert result["valid"] is True
     assert solution.solve_time_ms < 1000
+
+
+def test_fragile_staged_instances_prefers_sturdy_then_anchors_then_light_fragile():
+    pallet = Pallet("EUR", 1200, 800, 1800, 1000.0)
+    boxes = [
+        Box("STURDY", "", 600, 400, 200, 10.0, 6, fragile=False),
+        Box("FRAG_HEAVY", "", 300, 400, 300, 3.5, 4, fragile=True),
+        Box("FRAG_LIGHT", "", 200, 400, 300, 1.0, 8, fragile=True),
+    ]
+
+    staged = _fragile_staged_instances(boxes, pallet)
+    staged_skus = [box.sku_id for box, _ in staged]
+
+    assert staged_skus[:4] == ["STURDY"] * 4
+    assert staged_skus[4:6] == ["FRAG_HEAVY"] * 2
+    assert staged_skus[6] == "FRAG_LIGHT"

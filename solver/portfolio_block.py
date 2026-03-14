@@ -21,7 +21,7 @@ from .hybrid.pallet_state import PalletState, PlacedBox
 from .hybrid.postprocess import postprocess
 from .hybrid.rotations import get_orientations
 from .models import Box, Pallet
-from .packer import order_boxes, pack_greedy, pack_ordered_boxes
+from .packer import order_boxes, pack_greedy, pack_instance_sequence, pack_ordered_boxes
 from .scenario_selector import (
     SEED_FAMILIES,
     ScenarioFingerprint,
@@ -660,30 +660,42 @@ def _run_greedy_seed_family(
     t0 = time.perf_counter()
     task_id, pallet, boxes = _request_to_models(request)
     total_items = sum(box.quantity for box in boxes)
+    allow_staged_variant = ordered_boxes is None
     if ordered_boxes is None:
         ordered_boxes = _ordered_boxes_for_seed(boxes, seed_family)
-    solution = pack_ordered_boxes(
-        task_id,
-        pallet,
-        ordered_boxes,
-        label=seed_family,
-    )
-    placements = _placements_from_public_solution(
-        request["boxes"], solution.placements
-    )
-    remaining = _remaining_from_placements(request["boxes"], placements)
-    state, _ = _rebuild_state(request, placements)
-    run = PolicyRun(
+    base_run = _policy_run_from_solution(
+        request=request,
+        solution=pack_ordered_boxes(
+            task_id,
+            pallet,
+            ordered_boxes,
+            label=seed_family,
+        ),
+        total_items=total_items,
         name=seed_family,
-        placements=placements,
-        remaining=remaining,
-        block_steps=[],
-        score=_solution_proxy(state, total_items),
-        elapsed_ms=solution.solve_time_ms,
-        used_model=False,
         seed_family=seed_family,
         ordered_skus=tuple(box.sku_id for box in ordered_boxes),
     )
+    candidates = [base_run]
+    if allow_staged_variant and seed_family == "fragile_density":
+        staged_instances = _fragile_staged_instances(boxes, pallet)
+        if staged_instances:
+            candidates.append(
+                _policy_run_from_solution(
+                    request=request,
+                    solution=pack_instance_sequence(
+                        task_id,
+                        pallet,
+                        staged_instances,
+                        label=f"{seed_family}:staged",
+                    ),
+                    total_items=total_items,
+                    name=f"{seed_family}:staged",
+                    seed_family=seed_family,
+                    ordered_skus=(),
+                )
+            )
+    run = _select_best_run(candidates)
     if apply_postprocess:
         post_budget_ms = max(0, budget_ms - int((time.perf_counter() - t0) * 1000))
         run = _maybe_postprocess_run(
@@ -695,8 +707,83 @@ def _run_greedy_seed_family(
             time_budget_left_ms=post_budget_ms,
         )
         run.seed_family = seed_family
-        run.ordered_skus = tuple(box.sku_id for box in ordered_boxes)
+        if run.name == f"{seed_family}:staged" or run.name.startswith(f"{seed_family}:staged+"):
+            run.ordered_skus = ()
+        elif not run.ordered_skus:
+            run.ordered_skus = tuple(box.sku_id for box in ordered_boxes)
     return run
+
+
+def _policy_run_from_solution(
+    request: Dict[str, Any],
+    solution: Any,
+    total_items: int,
+    name: str,
+    seed_family: str,
+    ordered_skus: Tuple[str, ...],
+) -> PolicyRun:
+    placements = _placements_from_public_solution(
+        request["boxes"], solution.placements
+    )
+    remaining = _remaining_from_placements(request["boxes"], placements)
+    state, _ = _rebuild_state(request, placements)
+    return PolicyRun(
+        name=name,
+        placements=placements,
+        remaining=remaining,
+        block_steps=[],
+        score=_solution_proxy(state, total_items),
+        elapsed_ms=solution.solve_time_ms,
+        used_model=False,
+        seed_family=seed_family,
+        ordered_skus=ordered_skus,
+    )
+
+
+def _fragile_staged_instances(
+    boxes: Sequence[Box],
+    pallet: Pallet,
+) -> List[Tuple[Box, int]]:
+    sturdy = sorted(
+        [box for box in boxes if not box.fragile],
+        key=lambda box: (-box.base_area, -box.volume, -box.weight_kg),
+    )
+    fragile_heavy = sorted(
+        [box for box in boxes if box.fragile and box.weight_kg > FRAGILE_WEIGHT_THRESHOLD],
+        key=lambda box: (-box.base_area, -box.volume),
+    )
+    fragile_light = sorted(
+        [box for box in boxes if box.fragile and box.weight_kg <= FRAGILE_WEIGHT_THRESHOLD],
+        key=lambda box: (-box.base_area, -box.volume),
+    )
+    if not sturdy or not fragile_heavy or not fragile_light:
+        return []
+
+    pallet_area = pallet.length_mm * pallet.width_mm
+    target_area = pallet_area * 0.90
+    next_index: Dict[str, int] = {box.sku_id: 0 for box in boxes}
+    instances: List[Tuple[Box, int]] = []
+    area_acc = 0
+
+    for box in sturdy:
+        while next_index[box.sku_id] < box.quantity and area_acc < target_area:
+            instances.append((box, next_index[box.sku_id]))
+            next_index[box.sku_id] += 1
+            area_acc += box.base_area
+
+    for box in fragile_heavy:
+        anchor_count = min(2, box.quantity - next_index[box.sku_id])
+        for _ in range(anchor_count):
+            instances.append((box, next_index[box.sku_id]))
+            next_index[box.sku_id] += 1
+
+    for group in (fragile_light, fragile_heavy, sturdy):
+        for box in group:
+            while next_index[box.sku_id] < box.quantity:
+                instances.append((box, next_index[box.sku_id]))
+                next_index[box.sku_id] += 1
+
+    return instances
 
 
 def _ordered_boxes_for_seed(boxes: Sequence[Box], seed_family: str) -> List[Box]:
