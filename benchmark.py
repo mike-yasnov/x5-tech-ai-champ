@@ -23,6 +23,7 @@ from solver.packer import SORT_KEYS
 from validator import evaluate_solution
 from solver.models import Pallet, Box, solution_to_dict
 from solver.solver import solve
+from visualize import build_scenario_viz_data
 
 
 def _request_to_models(request_dict: dict):
@@ -177,36 +178,18 @@ def build_viz_data(results: list) -> list:
     """Extract visualization data from benchmark results."""
     viz = []
     for r in results:
-        boxes_meta = {b["sku_id"]: b for b in r.get("request_boxes", [])}
-        placements = []
-        for p in r.get("response", {}).get("placements", []):
-            sku = boxes_meta.get(p["sku_id"], {})
-            dim = p["dimensions_placed"]
-            pos = p["position"]
-            placements.append(
-                {
-                    "sku_id": p["sku_id"],
-                    "x_mm": pos["x_mm"],
-                    "y_mm": pos["y_mm"],
-                    "z_mm": pos["z_mm"],
-                    "length_mm": dim["length_mm"],
-                    "width_mm": dim["width_mm"],
-                    "height_mm": dim["height_mm"],
-                    "fragile": sku.get("fragile", False),
-                    "weight_kg": sku.get("weight_kg", 0),
-                }
-            )
+        request_dict = {
+            "task_id": r["scenario"],
+            "pallet": r.get("request_pallet", {}),
+            "boxes": r.get("request_boxes", []),
+        }
         viz.append(
-            {
-                "pallet": r.get("request_pallet", {}),
-                "placements": placements,
-                "meta": {
-                    "scenario": r["scenario"],
-                    "score": r.get("final_score", 0),
-                    "placed": r.get("placed", 0),
-                    "total_items": r.get("total_items", 0),
-                },
-            }
+            build_scenario_viz_data(
+                request_dict=request_dict,
+                response_dict=r.get("response", {}),
+                scenario_name=r["scenario"],
+                score=r.get("final_score", 0),
+            )
         )
     return viz
 

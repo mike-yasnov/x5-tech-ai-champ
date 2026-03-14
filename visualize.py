@@ -120,6 +120,53 @@ def _fragility_violation_bottom_indices(placements: List[Dict[str, Any]]) -> set
     return bottom_indices
 
 
+def build_scenario_viz_data(
+    request_dict: Dict[str, Any],
+    response_dict: Dict[str, Any],
+    scenario_name: str,
+    score: float = 0.0,
+) -> Dict[str, Any]:
+    """Build visualization payload for a single request/response pair."""
+    pallet = dict(request_dict.get("pallet", {}))
+    boxes_meta = {b["sku_id"]: b for b in request_dict.get("boxes", [])}
+
+    placements = []
+    for p in response_dict.get("placements", []):
+        sku = boxes_meta.get(p["sku_id"], {})
+        dim = p["dimensions_placed"]
+        pos = p["position"]
+        placements.append(
+            {
+                "sku_id": p["sku_id"],
+                "x_mm": pos["x_mm"],
+                "y_mm": pos["y_mm"],
+                "z_mm": pos["z_mm"],
+                "length_mm": dim["length_mm"],
+                "width_mm": dim["width_mm"],
+                "height_mm": dim["height_mm"],
+                "fragile": sku.get("fragile", False),
+                "weight_kg": sku.get("weight_kg", 0),
+            }
+        )
+
+    total_items = sum(int(box.get("quantity", 0)) for box in request_dict.get("boxes", []))
+    placed = len(response_dict.get("placements", []))
+    unplaced = response_dict.get("unplaced", [])
+    unplaced_boxes = _layout_unplaced_boxes(unplaced, boxes_meta, pallet)
+
+    return {
+        "pallet": pallet,
+        "placements": placements,
+        "unplaced_boxes": unplaced_boxes,
+        "meta": {
+            "scenario": scenario_name,
+            "score": score,
+            "placed": placed,
+            "total_items": total_items,
+        },
+    }
+
+
 def _generate_html(scenario: Dict[str, Any]) -> str:
     """Generate a standalone HTML file with Three.js 3D visualization."""
     pallet = scenario["pallet"]
@@ -443,6 +490,19 @@ function updateStepVisibility(step) {{
 stepSlider.addEventListener('input', () => updateStepVisibility(parseInt(stepSlider.value, 10)));
 if (totalPlaced === 0) {{
   document.getElementById('slider-wrap').style.display = 'none';
+}} else {{
+  updateStepVisibility(0);
+  const targetFrames = 42;
+  const stepAdvance = Math.max(1, Math.ceil(totalPlaced / targetFrames));
+  let currentStep = 0;
+  const autoplay = window.setInterval(() => {{
+    currentStep = Math.min(totalPlaced, currentStep + stepAdvance);
+    stepSlider.value = currentStep;
+    updateStepVisibility(currentStep);
+    if (currentStep >= totalPlaced) {{
+      window.clearInterval(autoplay);
+    }}
+  }}, 26);
 }}
 
 // Tooltip on hover
@@ -488,6 +548,11 @@ animate();
 </html>"""
 
 
+def generate_scenario_html(scenario: Dict[str, Any]) -> str:
+    """Public wrapper for generating standalone visualization HTML."""
+    return _generate_html(scenario)
+
+
 def generate_viz_data(benchmark_results: List[Dict], requests: List[Dict]) -> List[Dict]:
     """Build visualization data from benchmark results and original requests.
 
@@ -497,39 +562,14 @@ def generate_viz_data(benchmark_results: List[Dict], requests: List[Dict]) -> Li
     """
     viz_data = []
     for result, request in zip(benchmark_results, requests):
-        pallet = request["pallet"]
-        boxes_meta = {b["sku_id"]: b for b in request["boxes"]}
-
-        placements = []
-        for p in result.get("response", {}).get("placements", []):
-            sku = boxes_meta.get(p["sku_id"], {})
-            dim = p["dimensions_placed"]
-            pos = p["position"]
-            placements.append({
-                "sku_id": p["sku_id"],
-                "x_mm": pos["x_mm"],
-                "y_mm": pos["y_mm"],
-                "z_mm": pos["z_mm"],
-                "length_mm": dim["length_mm"],
-                "width_mm": dim["width_mm"],
-                "height_mm": dim["height_mm"],
-                "fragile": sku.get("fragile", False),
-                "weight_kg": sku.get("weight_kg", 0),
-            })
-
-        unplaced = result.get("response", {}).get("unplaced", [])
-        unplaced_boxes = _layout_unplaced_boxes(unplaced, boxes_meta, pallet)
-        viz_data.append({
-            "pallet": pallet,
-            "placements": placements,
-            "unplaced_boxes": unplaced_boxes,
-            "meta": {
-                "scenario": result["scenario"],
-                "score": result.get("final_score", 0),
-                "placed": result.get("placed", len(placements)),
-                "total_items": result.get("total_items", 0),
-            },
-        })
+        viz_data.append(
+            build_scenario_viz_data(
+                request_dict=request,
+                response_dict=result.get("response", {}),
+                scenario_name=result["scenario"],
+                score=result.get("final_score", 0),
+            )
+        )
 
     return viz_data
 

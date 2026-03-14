@@ -104,7 +104,7 @@ FOOD_RETAIL_ARCHETYPES: Dict[str, Dict[str, Any]] = {
         "wt": 22.0,
         "upright": True,
         "fragile": True,
-        "stackable": False,
+        "stackable": True,
     },
     "canned": {
         "desc": "Canned Peas",

@@ -10,6 +10,33 @@ from .geometry import AABB
 from .pallet_state import PalletState, PlacedBox
 
 
+def _supported_safely(
+    candidate: PlacedBox,
+    placements: List[PlacedBox],
+    self_idx: int,
+) -> bool:
+    if candidate.aabb.z_min == 0:
+        return True
+    base_area = candidate.aabb.base_area()
+    if base_area == 0:
+        return False
+    support = 0
+    for j, other in enumerate(placements):
+        if j == self_idx:
+            continue
+        if abs(other.aabb.z_max - candidate.aabb.z_min) >= EPSILON:
+            continue
+        overlap = candidate.aabb.overlap_area_xy(other.aabb)
+        if overlap <= 0:
+            continue
+        if not other.stackable:
+            return False
+        if candidate.weight > FRAGILE_WEIGHT_THRESHOLD and other.fragile and not candidate.fragile:
+            return False
+        support += overlap
+    return support / base_area >= 0.6 - EPSILON
+
+
 def compact_downward(
     placements: List[PlacedBox],
     pallet_length: int,
@@ -63,24 +90,11 @@ def compact_downward(
         if collision:
             continue
 
-        # Check support
-        if best_z > 0:
-            base_area = lx * ly
-            support = 0
-            for j, other in enumerate(result):
-                if j == idx:
-                    continue
-                if abs(other.aabb.z_max - best_z) < EPSILON:
-                    support += new_aabb.overlap_area_xy(other.aabb)
-            if base_area == 0 or support / base_area < 0.6 - EPSILON:
-                continue
-
         # Check height
         if new_aabb.z_max > max_height + EPSILON:
             continue
 
-        # Apply the move
-        new_box = PlacedBox(
+        candidate_box = PlacedBox(
             sku_id=box.sku_id,
             instance_index=box.instance_index,
             aabb=new_aabb,
@@ -91,7 +105,11 @@ def compact_downward(
             rotation_code=box.rotation_code,
             placed_dims=box.placed_dims,
         )
-        result[idx] = new_box
+        test_result = list(result)
+        test_result[idx] = candidate_box
+        if not _supported_safely(candidate_box, test_result, idx):
+            continue
+        result[idx] = candidate_box
 
     return result
 
@@ -162,6 +180,8 @@ def _count_fragility_violations(placements: List[PlacedBox]) -> int:
     count = 0
     for top in placements:
         if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        if top.fragile:
             continue
         for bottom in placements:
             if not bottom.fragile:
@@ -245,19 +265,9 @@ def _try_swap_z(
             if box.aabb.overlaps_3d(result[m].aabb):
                 return None
 
-    # Check support for both swapped boxes
+    # Check support and local safety for both swapped boxes
     for idx in [upper_idx, lower_idx]:
-        box = result[idx]
-        if box.aabb.z_min == 0:
-            continue
-        base_area = box.aabb.base_area()
-        support = 0
-        for k, other in enumerate(result):
-            if k == idx:
-                continue
-            if abs(other.aabb.z_max - box.aabb.z_min) < EPSILON:
-                support += box.aabb.overlap_area_xy(other.aabb)
-        if base_area == 0 or support / base_area < 0.6 - EPSILON:
+        if not _supported_safely(result[idx], result, idx):
             return None
 
     return result

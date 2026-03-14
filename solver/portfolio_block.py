@@ -21,6 +21,7 @@ from .hybrid.geometry import AABB
 from .hybrid.pallet_state import PalletState, PlacedBox
 from .hybrid.postprocess import postprocess
 from .hybrid.rotations import get_orientations
+from .hybrid.search import beam_search_solve
 from .models import Box, Pallet
 from .packer import order_boxes, pack_greedy, pack_instance_sequence, pack_ordered_boxes
 from .scenario_selector import (
@@ -152,6 +153,53 @@ class _BlockSpec:
     heuristic_score: float
 
 
+def _is_weight_tight_fingerprint(fingerprint: ScenarioFingerprint) -> bool:
+    return fingerprint.weight_ratio >= 0.92
+
+
+def _is_low_ceiling_pressure(fingerprint: ScenarioFingerprint) -> bool:
+    return (
+        fingerprint.upright_ratio >= 0.55
+        and fingerprint.median_height_ratio >= 0.18
+        and fingerprint.total_items >= 20
+    )
+
+
+def _is_fragile_dominant_fingerprint(fingerprint: ScenarioFingerprint) -> bool:
+    return fingerprint.fragile_ratio >= 0.55
+
+
+def _is_dominant_repeat_fingerprint(fingerprint: ScenarioFingerprint) -> bool:
+    return fingerprint.sku_count <= 3 and fingerprint.max_sku_share >= 0.70
+
+
+def _coverage_seed_supported(fingerprint: ScenarioFingerprint) -> bool:
+    return (
+        _is_weight_tight_fingerprint(fingerprint)
+        or _is_low_ceiling_pressure(fingerprint)
+        or (fingerprint.volume_ratio >= 0.95 and fingerprint.total_items <= 24)
+        or (fingerprint.total_items <= 24 and fingerprint.sku_count >= 4)
+    )
+
+
+def _promote_seed(order: List[str], seed_family: str, index: int) -> None:
+    if seed_family not in order:
+        return
+    order.remove(seed_family)
+    index = max(0, min(index, len(order)))
+    order.insert(index, seed_family)
+
+
+def _allow_block_top3(fingerprint: ScenarioFingerprint) -> bool:
+    return (
+        fingerprint.total_items <= 60
+        and (
+            fingerprint.sku_count <= 4
+            or fingerprint.max_sku_share >= 0.45
+        )
+    )
+
+
 def solve_request(
     request: Dict[str, Any],
     model_dir: str | Path = "models",
@@ -168,8 +216,13 @@ def solve_request(
     t0 = time.perf_counter()
     proxy_upper_bound = _proxy_upper_bound(request)
     repeat_heavy = fingerprint.total_items >= 60 and fingerprint.sku_count <= 4
+    weight_tight = _is_weight_tight_fingerprint(fingerprint)
+    low_ceiling = _is_low_ceiling_pressure(fingerprint)
+    fragile_dominant = _is_fragile_dominant_fingerprint(fingerprint)
     prefer_safe_fragility = _should_use_conservative_fragility_selection(fingerprint)
     fast_overload_path = _should_use_fast_overload_path(fingerprint)
+    add_strict_fragility_run = _should_add_strict_fragility_run(request, fingerprint)
+    try_small_beam = _should_try_small_beam(fingerprint)
 
     seed_limit_ms = min(220, max(120, time_budget_ms // 4))
     order_budget_ms = max(80, min(260, time_budget_ms // 4))
@@ -181,7 +234,14 @@ def solve_request(
 
     ranked_families = _rank_seed_families(fingerprint, selector)
     runs: List[PolicyRun] = []
-    seed_eval_count = 2 if (repeat_heavy or fast_overload_path) else 3
+    seed_eval_count = (
+        2
+        if (
+            repeat_heavy
+            or (fast_overload_path and not (weight_tight or fragile_dominant))
+        )
+        else 3
+    )
 
     for seed_family in ranked_families[:seed_eval_count]:
         elapsed_so_far = int((time.perf_counter() - t0) * 1000)
@@ -201,6 +261,38 @@ def solve_request(
         if _is_near_proxy_upper_bound(run.score, proxy_upper_bound):
             break
 
+    if add_strict_fragility_run:
+        elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+        budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
+        if budget_left > 35:
+            strict_seed_family = (
+                "fragile_density"
+                if "fragile_density" in ranked_families
+                else ranked_families[0]
+            )
+            runs.append(
+                _run_greedy_seed_family(
+                    request=request,
+                    seed_family=strict_seed_family,
+                    checker=checker,
+                    candidate_gen=candidate_gen,
+                    budget_ms=min(seed_limit_ms, budget_left),
+                    strict_fragility=True,
+                )
+            )
+
+    if try_small_beam:
+        elapsed_so_far = int((time.perf_counter() - t0) * 1000)
+        budget_left = max(0, time_budget_ms - elapsed_so_far - repair_budget_ms)
+        if budget_left > 35:
+            runs.append(
+                _run_small_beam_candidate(
+                    request=request,
+                    checker=checker,
+                    budget_ms=min(160, budget_left),
+                )
+            )
+
     if not runs:
         runs.append(
             _run_legacy_portfolio(
@@ -211,7 +303,14 @@ def solve_request(
             )
         )
 
-    enable_local_order = fingerprint.total_items <= 120 and fingerprint.sku_count <= 8
+    enable_local_order = (
+        (fingerprint.total_items <= 120 and fingerprint.sku_count <= 8)
+        or (
+            fingerprint.total_items <= 160
+            and fingerprint.sku_count <= 5
+            and (weight_tight or fragile_dominant)
+        )
+    )
     best_greedy = _best_greedy_run(runs)
     if best_greedy is not None and enable_local_order:
         elapsed_so_far = int((time.perf_counter() - t0) * 1000)
@@ -540,10 +639,23 @@ def _rank_seed_families(
 
 
 def _fallback_seed_order(fingerprint: ScenarioFingerprint) -> List[str]:
+    weight_tight = _is_weight_tight_fingerprint(fingerprint)
+    low_ceiling = _is_low_ceiling_pressure(fingerprint)
+    fragile_dominant = _is_fragile_dominant_fingerprint(fingerprint)
+    dominant_repeat = _is_dominant_repeat_fingerprint(fingerprint)
+    coverage_supported = _coverage_seed_supported(fingerprint)
+    allow_block_top3 = _allow_block_top3(fingerprint)
+
     primary: str
-    if fingerprint.weight_ratio >= 0.90 and fingerprint.upright_ratio >= 0.50:
+    if dominant_repeat:
+        primary = "block_structured"
+    elif fragile_dominant:
+        primary = "fragile_density"
+    elif coverage_supported and (weight_tight or low_ceiling):
+        primary = "coverage_tie"
+    elif fingerprint.weight_ratio >= 0.90 and fingerprint.upright_ratio >= 0.50:
         primary = "heavy_base"
-    elif fingerprint.fragile_ratio >= 0.30 and fingerprint.total_items < 60:
+    elif fingerprint.fragile_ratio >= 0.30:
         primary = "fragile_density"
     elif fingerprint.volume_ratio < 0.60:
         primary = "liquid_fill"
@@ -555,27 +667,20 @@ def _fallback_seed_order(fingerprint: ScenarioFingerprint) -> List[str]:
         if seed_family not in order:
             order.append(seed_family)
 
-    if (
-        fingerprint.volume_ratio >= 0.95
-        and fingerprint.total_items <= 12
-        and "coverage_tie" not in order[:2]
-    ):
-        order.insert(1, "coverage_tie")
-    else:
+    if "coverage_tie" not in order:
         order.append("coverage_tie")
 
-    allow_block_top3 = (
-        fingerprint.total_items <= 60
-        and (
-            fingerprint.sku_count <= 4
-            or fingerprint.max_sku_share >= 0.45
-        )
-    )
-    if allow_block_top3:
-        insert_at = 2 if len(order) >= 2 else len(order)
-        if "block_structured" in order:
-            order.remove("block_structured")
-        order.insert(insert_at, "block_structured")
+    if "block_structured" not in order:
+        order.append("block_structured")
+
+    if coverage_supported:
+        _promote_seed(order, "coverage_tie", 1 if primary != "coverage_tie" else 0)
+    if fragile_dominant:
+        _promote_seed(order, "fragile_density", 0 if primary == "fragile_density" else 1)
+    if dominant_repeat:
+        _promote_seed(order, "block_structured", 0)
+    elif allow_block_top3:
+        _promote_seed(order, "block_structured", 2)
     else:
         order = [seed_family for seed_family in order if seed_family != "block_structured"]
         order.append("block_structured")
@@ -592,13 +697,11 @@ def _blend_seed_orders(
     fallback_order: Sequence[str],
     fingerprint: ScenarioFingerprint,
 ) -> List[str]:
-    allow_block_top3 = (
-        fingerprint.total_items <= 60
-        and (
-            fingerprint.sku_count <= 4
-            or fingerprint.max_sku_share >= 0.45
-        )
-    )
+    allow_block_top3 = _allow_block_top3(fingerprint)
+    weight_tight = _is_weight_tight_fingerprint(fingerprint)
+    coverage_supported = _coverage_seed_supported(fingerprint)
+    dominant_repeat = _is_dominant_repeat_fingerprint(fingerprint)
+    fragile_dominant = _is_fragile_dominant_fingerprint(fingerprint)
     scores: Dict[str, float] = {}
     total = float(len(SEED_FAMILIES))
     for idx, seed_family in enumerate(fallback_order):
@@ -606,16 +709,19 @@ def _blend_seed_orders(
     for idx, seed_family in enumerate(learned_order):
         scores[seed_family] = scores.get(seed_family, 0.0) + (total - idx) * 0.7
 
-    if not allow_block_top3:
+    if not allow_block_top3 and not dominant_repeat:
         scores["block_structured"] = scores.get("block_structured", 0.0) - total
-    coverage_tie_supported = (
-        fingerprint.volume_ratio >= 0.95
-        and fingerprint.total_items <= 12
-    )
-    if coverage_tie_supported:
+    if coverage_supported:
         scores["coverage_tie"] = scores.get("coverage_tie", 0.0) + 1.5
     else:
         scores["coverage_tie"] = scores.get("coverage_tie", 0.0) - total
+    if dominant_repeat:
+        scores["block_structured"] = scores.get("block_structured", 0.0) + max(1.5, total * 0.8)
+    if fragile_dominant:
+        scores["fragile_density"] = scores.get("fragile_density", 0.0) + 1.2
+    if weight_tight:
+        scores["coverage_tie"] = scores.get("coverage_tie", 0.0) + 0.8
+        scores["mixed_volume"] = scores.get("mixed_volume", 0.0) + 0.4
 
     return sorted(SEED_FAMILIES, key=lambda seed_family: scores.get(seed_family, 0.0), reverse=True)
 
@@ -724,7 +830,7 @@ def _run_greedy_seed_family(
     total_items = sum(box.quantity for box in boxes)
     allow_staged_variant = ordered_boxes is None
     if ordered_boxes is None:
-        ordered_boxes = _ordered_boxes_for_seed(boxes, seed_family)
+        ordered_boxes = _ordered_boxes_for_seed(boxes, seed_family, request=request)
     run_name = f"{seed_family}:strict" if strict_fragility else seed_family
     label = f"{seed_family}:strict" if strict_fragility else seed_family
     base_run = _policy_run_from_solution(
@@ -743,8 +849,21 @@ def _run_greedy_seed_family(
     )
     candidates = [base_run]
     if allow_staged_variant and seed_family == "fragile_density":
-        staged_instances = _fragile_staged_instances(boxes, pallet)
-        if staged_instances:
+        staged_variants = [
+            ("staged", _fragile_staged_instances(boxes, pallet)),
+        ]
+        if _should_try_aggressive_fragile_staging(boxes):
+            aggressive_instances = _fragile_staged_instances(
+                boxes,
+                pallet,
+                anchor_count=3,
+            )
+            if aggressive_instances and aggressive_instances != staged_variants[0][1]:
+                staged_variants.append(("staged3", aggressive_instances))
+
+        for suffix, staged_instances in staged_variants:
+            if not staged_instances:
+                continue
             candidates.append(
                 _policy_run_from_solution(
                     request=request,
@@ -752,11 +871,11 @@ def _run_greedy_seed_family(
                         task_id,
                         pallet,
                         staged_instances,
-                        label=f"{label}:staged",
+                        label=f"{label}:{suffix}",
                         strict_fragility=strict_fragility,
                     ),
                     total_items=total_items,
-                    name=f"{run_name}:staged",
+                    name=f"{run_name}:{suffix}",
                     seed_family=seed_family,
                     ordered_skus=(),
                 )
@@ -773,7 +892,7 @@ def _run_greedy_seed_family(
             time_budget_left_ms=post_budget_ms,
         )
         run.seed_family = seed_family
-        if run.name == f"{run_name}:staged" or run.name.startswith(f"{run_name}:staged+"):
+        if run.name.startswith(f"{run_name}:staged"):
             run.ordered_skus = ()
         elif not run.ordered_skus:
             run.ordered_skus = tuple(box.sku_id for box in ordered_boxes)
@@ -809,6 +928,8 @@ def _policy_run_from_solution(
 def _fragile_staged_instances(
     boxes: Sequence[Box],
     pallet: Pallet,
+    anchor_count: int = 2,
+    target_area_ratio: float = 0.90,
 ) -> List[Tuple[Box, int]]:
     sturdy = sorted(
         [box for box in boxes if not box.fragile],
@@ -826,7 +947,7 @@ def _fragile_staged_instances(
         return []
 
     pallet_area = pallet.length_mm * pallet.width_mm
-    target_area = pallet_area * 0.90
+    target_area = pallet_area * target_area_ratio
     next_index: Dict[str, int] = {box.sku_id: 0 for box in boxes}
     instances: List[Tuple[Box, int]] = []
     area_acc = 0
@@ -838,8 +959,8 @@ def _fragile_staged_instances(
             area_acc += box.base_area
 
     for box in fragile_heavy:
-        anchor_count = min(2, box.quantity - next_index[box.sku_id])
-        for _ in range(anchor_count):
+        anchor_limit = min(anchor_count, box.quantity - next_index[box.sku_id])
+        for _ in range(anchor_limit):
             instances.append((box, next_index[box.sku_id]))
             next_index[box.sku_id] += 1
 
@@ -852,9 +973,127 @@ def _fragile_staged_instances(
     return instances
 
 
-def _ordered_boxes_for_seed(boxes: Sequence[Box], seed_family: str) -> List[Box]:
+def _should_try_aggressive_fragile_staging(
+    boxes: Sequence[Box],
+) -> bool:
+    total_items = sum(box.quantity for box in boxes)
+    has_sturdy = any(not box.fragile for box in boxes)
+    has_fragile_light = any(
+        box.fragile and box.weight_kg <= FRAGILE_WEIGHT_THRESHOLD
+        for box in boxes
+    )
+    heavy_fragile_qty = max(
+        (
+            box.quantity
+            for box in boxes
+            if box.fragile and box.weight_kg > FRAGILE_WEIGHT_THRESHOLD
+        ),
+        default=0,
+    )
+    return (
+        total_items <= 96
+        and has_sturdy
+        and has_fragile_light
+        and heavy_fragile_qty >= 3
+    )
+
+
+def _request_order_context(request: Dict[str, Any]) -> Dict[str, Any]:
+    fingerprint = compute_request_fingerprint(request)
+    return {
+        "fingerprint": fingerprint,
+        "weight_tight": _is_weight_tight_fingerprint(fingerprint),
+        "low_ceiling": _is_low_ceiling_pressure(fingerprint),
+        "fragile_dominant": _is_fragile_dominant_fingerprint(fingerprint),
+    }
+
+
+def _box_density(box: Box) -> float:
+    return box.weight_kg / max(box.volume / 1e9, 1e-9)
+
+
+def _fragility_group(box: Box) -> int:
+    if not box.fragile:
+        return 0
+    if box.weight_kg > FRAGILE_WEIGHT_THRESHOLD:
+        return 1
+    return 2
+
+
+def _ordered_boxes_for_seed(
+    boxes: Sequence[Box],
+    seed_family: str,
+    request: Optional[Dict[str, Any]] = None,
+) -> List[Box]:
     if seed_family not in GREEDY_SEED_TO_SORT:
         return list(boxes)
+    if request is None:
+        return order_boxes(boxes, GREEDY_SEED_TO_SORT[seed_family])
+
+    context = _request_order_context(request)
+    weight_tight = context["weight_tight"]
+    low_ceiling = context["low_ceiling"]
+
+    if seed_family == "coverage_tie" and weight_tight:
+        return sorted(
+            list(boxes),
+            key=lambda box: (
+                box.weight_kg,
+                -box.base_area,
+                box.height_mm,
+                -box.quantity,
+            ),
+        )
+    if seed_family == "coverage_tie" and low_ceiling:
+        return sorted(
+            list(boxes),
+            key=lambda box: (
+                box.height_mm,
+                -box.base_area,
+                box.weight_kg,
+                -box.quantity,
+            ),
+        )
+    if seed_family == "mixed_volume" and weight_tight:
+        return sorted(
+            list(boxes),
+            key=lambda box: (
+                -(box.volume / max(box.weight_kg, 1e-6)),
+                -box.base_area,
+                box.height_mm,
+            ),
+        )
+    if seed_family == "heavy_base" and weight_tight:
+        return sorted(
+            list(boxes),
+            key=lambda box: (
+                -box.base_area,
+                -_box_density(box),
+                -box.weight_kg,
+                -box.volume,
+            ),
+        )
+    if seed_family == "liquid_fill" and low_ceiling:
+        return sorted(
+            list(boxes),
+            key=lambda box: (
+                -box.base_area,
+                box.height_mm,
+                -box.volume,
+                box.weight_kg,
+            ),
+        )
+    if seed_family == "fragile_density":
+        return sorted(
+            list(boxes),
+            key=lambda box: (
+                _fragility_group(box),
+                (box.weight_kg / max(box.volume, 1)) if weight_tight else 0.0,
+                -box.base_area if not box.fragile else box.height_mm,
+                -_box_density(box) if not box.fragile else box.weight_kg,
+                -box.quantity,
+            ),
+        )
     return order_boxes(boxes, GREEDY_SEED_TO_SORT[seed_family])
 
 
@@ -863,6 +1102,69 @@ def _best_greedy_run(runs: Sequence[PolicyRun]) -> Optional[PolicyRun]:
     if not greedy_runs:
         return None
     return _select_best_run(greedy_runs)
+
+
+def _should_add_strict_fragility_run(
+    request: Dict[str, Any],
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return (
+        _has_heavy_fragile_items(request)
+        and fingerprint.total_items <= 180
+        and (
+            fingerprint.fragile_ratio >= 0.35
+            or (
+                fingerprint.fragile_ratio >= 0.20
+                and fingerprint.upright_ratio >= 0.35
+            )
+            or (
+                fingerprint.sku_count <= 4
+                and fingerprint.fragile_ratio >= 0.20
+            )
+        )
+    )
+
+
+def _should_try_small_beam(fingerprint: ScenarioFingerprint) -> bool:
+    return (
+        fingerprint.total_items <= 24
+        and fingerprint.sku_count >= 4
+        and fingerprint.max_sku_share <= 0.60
+    )
+
+
+def _run_small_beam_candidate(
+    request: Dict[str, Any],
+    checker: FeasibilityChecker,
+    budget_ms: int,
+) -> PolicyRun:
+    state, ep_manager, remaining = _fresh_search_state(request)
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    t0 = time.perf_counter()
+    placements, leftover = beam_search_solve(
+        remaining=_clone_remaining(remaining),
+        state=state,
+        ep_manager=ep_manager,
+        checker=checker,
+        candidate_gen=CandidateGenerator(checker, max_candidates=120),
+        model=None,
+        extractor=None,
+        beam_width=3,
+        max_expansions=3,
+        time_budget_s=max(budget_ms, 1) / 1000.0,
+    )
+    rebuilt_state, _ = _rebuild_state(request, placements)
+    return PolicyRun(
+        name="small_beam",
+        placements=placements,
+        remaining=_clone_remaining(leftover),
+        block_steps=[],
+        score=_solution_proxy(rebuilt_state, total_items),
+        elapsed_ms=int((time.perf_counter() - t0) * 1000),
+        used_model=False,
+        seed_family="coverage_tie",
+        ordered_skus=(),
+    )
 
 
 def _local_order_search(
@@ -879,11 +1181,11 @@ def _local_order_search(
     _, _, boxes = _request_to_models(request)
     by_sku = {box.sku_id: box for box in boxes}
     current_order = [by_sku[sku_id] for sku_id in run.ordered_skus if sku_id in by_sku]
-    top_n = min(4, len(current_order))
+    total_items = sum(box["quantity"] for box in request["boxes"])
+    top_n = min(5 if total_items <= 20 else 4, len(current_order))
     if top_n < 2:
         return run
 
-    total_items = sum(box["quantity"] for box in request["boxes"])
     sku_count = len(request["boxes"])
     fast_overload_path = (
         total_items >= 90
@@ -895,8 +1197,11 @@ def _local_order_search(
     best_raw_run = run
     neighbors: List[List[Box]]
     exact_search = len(current_order) <= 3
+    exact_prefix_search = total_items <= 20 and top_n <= 5
     if exact_search:
         neighbors = _generate_exact_orderings(current_order)
+    elif exact_prefix_search:
+        neighbors = _generate_exact_prefix_orderings(current_order, top_n)
     else:
         neighbors = _generate_order_neighbors(current_order, top_n)
     raw_runs: List[PolicyRun] = []
@@ -937,7 +1242,7 @@ def _local_order_search(
         return best_raw_run
 
     raw_runs.sort(key=_run_sort_key, reverse=True)
-    if exact_search:
+    if exact_search or exact_prefix_search:
         shortlist_k = len(raw_runs)
     else:
         shortlist_k = (
@@ -979,6 +1284,25 @@ def _generate_exact_orderings(
             continue
         seen.add(key)
         neighbors.append(list(permutation))
+    return neighbors
+
+
+def _generate_exact_prefix_orderings(
+    ordered_boxes: Sequence[Box],
+    top_n: int,
+) -> List[List[Box]]:
+    prefix = list(ordered_boxes[:top_n])
+    suffix = list(ordered_boxes[top_n:])
+    current = tuple(box.sku_id for box in ordered_boxes)
+    seen = set()
+    neighbors: List[List[Box]] = []
+    for permutation in itertools.permutations(prefix):
+        candidate = list(permutation) + suffix
+        key = tuple(box.sku_id for box in candidate)
+        if key == current or key in seen:
+            continue
+        seen.add(key)
+        neighbors.append(candidate)
     return neighbors
 
 
@@ -1035,12 +1359,16 @@ def _should_try_strict_fragility_search(
     if coverage < 0.85:
         return False
 
-    has_heavy_fragile = any(
+    has_heavy_fragile = _has_heavy_fragile_items(request)
+    has_non_fragile = any(not box.get("fragile", False) for box in request["boxes"])
+    return has_heavy_fragile and (has_non_fragile or fingerprint.fragile_ratio >= 0.45)
+
+
+def _has_heavy_fragile_items(request: Dict[str, Any]) -> bool:
+    return any(
         box.get("fragile", False) and box["weight_kg"] > FRAGILE_WEIGHT_THRESHOLD
         for box in request["boxes"]
     )
-    has_non_fragile = any(not box.get("fragile", False) for box in request["boxes"])
-    return has_heavy_fragile and has_non_fragile
 
 
 def _repair_candidate_run(
@@ -1239,11 +1567,21 @@ def _repair_remove_and_refill(
 
     total_items = sum(box["quantity"] for box in request["boxes"])
     offenders = _fragility_offender_signatures(run.placements)
-    remove_count = max(1, math.ceil(len(run.placements) * 0.2))
+    weight_pressure = compute_request_fingerprint(request).weight_ratio
+    total_request_weight = sum(
+        box["weight_kg"] * box["quantity"] for box in request["boxes"]
+    )
+    remove_frac = 0.2 if weight_pressure < 0.95 else 0.3
+    remove_count = max(1, math.ceil(len(run.placements) * remove_frac))
     ranked = sorted(
         run.placements,
         key=lambda placement: _placement_keep_score(
-            placement, request, total_items, offenders
+            placement,
+            request,
+            total_items,
+            offenders,
+            weight_pressure=weight_pressure,
+            total_request_weight=total_request_weight,
         ),
     )
     removed = {
@@ -1298,6 +1636,8 @@ def _fragility_conflicts(
     conflicts: List[FragilityConflict] = []
     for top in placements:
         if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        if top.fragile:
             continue
         for bottom in placements:
             if not bottom.fragile:
@@ -1442,11 +1782,19 @@ def _placement_keep_score(
     request: Dict[str, Any],
     total_items: int,
     offenders: set[Tuple[str, int, int, int, int]],
+    weight_pressure: Optional[float] = None,
+    total_request_weight: Optional[float] = None,
 ) -> float:
     pallet = request["pallet"]
     pallet_volume = (
         pallet["length_mm"] * pallet["width_mm"] * pallet["max_height_mm"]
     )
+    if weight_pressure is None:
+        weight_pressure = compute_request_fingerprint(request).weight_ratio
+    if total_request_weight is None:
+        total_request_weight = sum(
+            box["weight_kg"] * box["quantity"] for box in request["boxes"]
+        )
     vol_gain = 0.50 * (
         placement.aabb.length_x() * placement.aabb.width_y() * placement.aabb.height_z()
     ) / max(pallet_volume, 1)
@@ -1459,7 +1807,28 @@ def _placement_keep_score(
         or placement.aabb.y_max >= pallet["width_mm"]
     )
     offender_penalty = 0.18 if _placement_signature(placement) in offenders else 0.0
-    return vol_gain + coverage_gain + floor_bonus + wall_bonus - offender_penalty
+    density_bonus = 0.0
+    weight_penalty = 0.0
+    if weight_pressure >= 0.95:
+        placement_density = placement.weight / max(
+            placement.aabb.volume() / 1e9, 1e-9
+        )
+        pallet_density = total_request_weight / max(pallet_volume / 1e9, 1e-9)
+        density_bonus = 0.06 * min(
+            placement_density / max(pallet_density, 1.0), 2.0
+        )
+        weight_penalty = 0.06 * (
+            placement.weight / max(pallet["max_weight_kg"], 1.0)
+        )
+    return (
+        vol_gain
+        + coverage_gain
+        + floor_bonus
+        + wall_bonus
+        + density_bonus
+        - weight_penalty
+        - offender_penalty
+    )
 
 
 def _placement_signature(placement: PlacedBox) -> Tuple[str, int, int, int, int]:
@@ -1750,6 +2119,8 @@ def _maybe_postprocess_run(
         score=post_score,
         elapsed_ms=run.elapsed_ms + int((time.perf_counter() - t0) * 1000),
         used_model=run.used_model,
+        seed_family=run.seed_family,
+        ordered_skus=run.ordered_skus,
     )
 
 
@@ -1956,18 +2327,18 @@ def _unit_feasible(
         return False
     if not checker.check_stackable(aabb, state):
         return False
-    if _heavy_non_fragile_on_fragile(aabb, item.weight, item.fragile, state):
+    if _heavy_on_fragile(aabb, item.weight, item.fragile, state):
         return False
     return True
 
 
-def _heavy_non_fragile_on_fragile(
+def _heavy_on_fragile(
     aabb: AABB,
     weight: float,
     fragile: bool,
     state: PalletState,
 ) -> bool:
-    if fragile or weight <= FRAGILE_WEIGHT_THRESHOLD or aabb.z_min == 0:
+    if weight <= FRAGILE_WEIGHT_THRESHOLD or fragile or aabb.z_min == 0:
         return False
     for placed in state.placed:
         if not placed.fragile:
@@ -2099,13 +2470,22 @@ def _should_use_conservative_fragility_selection(
     fingerprint: ScenarioFingerprint,
 ) -> bool:
     return (
-        fingerprint.sku_count >= 5
-        and fingerprint.volume_ratio <= 1.05
-        and fingerprint.fragile_ratio >= 0.18
-        and fingerprint.upright_ratio >= 0.45
-        and (
-            fingerprint.non_stackable_ratio >= 0.05
-            or fingerprint.weight_ratio >= 0.55
+        (
+            fingerprint.sku_count >= 5
+            and fingerprint.volume_ratio <= 1.05
+            and fingerprint.fragile_ratio >= 0.18
+            and fingerprint.upright_ratio >= 0.45
+            and (
+                fingerprint.non_stackable_ratio >= 0.05
+                or fingerprint.weight_ratio >= 0.55
+            )
+        )
+        or (
+            fingerprint.fragile_ratio >= 0.45
+            and (
+                fingerprint.upright_ratio >= 0.20
+                or fingerprint.weight_ratio >= 0.35
+            )
         )
     )
 
@@ -2141,7 +2521,26 @@ def _top_level_run_sort_key(
     volume_util = placed_volume / max(pallet_volume, 1)
     coverage = len(run.placements) / max(total_items, 1)
     fragility_score = _fragility_score_from_placements(run.placements)
-    conservative_score = run.score + 0.40 * fragility_score
+    fingerprint = compute_request_fingerprint(request)
+    near_fit_fragile_chaos = (
+        fingerprint.volume_ratio <= 1.10
+        and (
+            fingerprint.non_stackable_ratio >= 0.05
+            or fingerprint.upright_ratio >= 0.45
+        )
+    )
+    if near_fit_fragile_chaos:
+        conservative_score = (
+            0.40 * volume_util
+            + 0.20 * coverage
+            + 0.40 * fragility_score
+        )
+    else:
+        conservative_score = (
+            0.50 * volume_util
+            + 0.30 * coverage
+            + 0.20 * fragility_score
+        )
     return (conservative_score, -run.elapsed_ms)
 
 
@@ -2151,6 +2550,8 @@ def _fragility_score_from_placements(
     violations = 0
     for top in placements:
         if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        if top.fragile:
             continue
         for bottom in placements:
             if not bottom.fragile:
@@ -2190,6 +2591,8 @@ def _solution_proxy(state: PalletState, total_items: int) -> float:
     fragility_violations = 0
     for top in placements:
         if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            continue
+        if top.fragile:
             continue
         for bottom in placements:
             if not bottom.fragile:

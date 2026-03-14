@@ -12,9 +12,13 @@ from solver.portfolio_block import (
     _BlockSpec,
     _fragility_conflict_clusters,
     _fragility_conflicts,
+    _fragility_score_from_placements,
     _generate_exact_orderings,
+    _generate_exact_prefix_orderings,
     _fragile_staged_instances,
+    _heavy_on_fragile,
     _materialize_block_candidate,
+    _should_try_aggressive_fragile_staging,
     _should_use_fast_overload_path,
     _should_try_strict_fragility_search,
     PolicyRun,
@@ -152,6 +156,27 @@ def test_block_feasibility_respects_stackable_false():
     assert candidate is None
 
 
+def test_heavy_fragile_is_not_blocked_on_fragile_support():
+    state = PalletState(1200, 800, 1800, 1000.0)
+    bottom = PlacedBox(
+        sku_id="FRAGILE-BASE",
+        instance_index=0,
+        aabb=AABB(0, 0, 0, 400, 400, 200),
+        weight=1.0,
+        fragile=True,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+    state.place(bottom)
+
+    top_aabb = AABB(0, 0, 200, 400, 400, 400)
+
+    assert _heavy_on_fragile(top_aabb, 5.0, True, state) is False
+    assert _heavy_on_fragile(top_aabb, 5.0, False, state) is True
+
+
 def test_default_solve_dispatches_to_portfolio(monkeypatch):
     from solver import solver as solver_module
 
@@ -234,6 +259,23 @@ def test_fragile_staged_instances_prefers_sturdy_then_anchors_then_light_fragile
     assert staged_skus[6] == "FRAG_LIGHT"
 
 
+def test_aggressive_fragile_staging_gate_targets_mixed_fragile_heavy_layouts():
+    pallet = Pallet("EUR", 1200, 800, 1800, 1000.0)
+    boxes = [
+        Box("STURDY", "", 600, 400, 200, 10.0, 6, fragile=False),
+        Box("FRAG_HEAVY", "", 300, 400, 300, 3.5, 4, fragile=True),
+        Box("FRAG_LIGHT", "", 200, 400, 300, 1.0, 8, fragile=True),
+    ]
+
+    assert _should_try_aggressive_fragile_staging(boxes) is True
+
+    aggressive = _fragile_staged_instances(boxes, pallet, anchor_count=3)
+    aggressive_skus = [box.sku_id for box, _ in aggressive]
+
+    assert aggressive_skus[:4] == ["STURDY"] * 4
+    assert aggressive_skus[4:7] == ["FRAG_HEAVY"] * 3
+
+
 def test_generate_exact_orderings_returns_all_unique_permutations_except_current():
     boxes = [
         Box("A", "", 100, 100, 100, 1.0, 1),
@@ -247,6 +289,63 @@ def test_generate_exact_orderings_returns_all_unique_permutations_except_current
     assert len(orderings) == 5
     assert len(keys) == 5
     assert ("A", "B", "C") not in keys
+
+
+def test_generate_exact_prefix_orderings_only_permutes_prefix():
+    boxes = [
+        Box("A", "", 100, 100, 100, 1.0, 1),
+        Box("B", "", 100, 100, 100, 1.0, 1),
+        Box("C", "", 100, 100, 100, 1.0, 1),
+        Box("D", "", 100, 100, 100, 1.0, 1),
+    ]
+
+    orderings = _generate_exact_prefix_orderings(boxes, 3)
+    keys = {tuple(box.sku_id for box in ordering) for ordering in orderings}
+
+    assert len(orderings) == 5
+    assert all(ordering[-1].sku_id == "D" for ordering in orderings)
+    assert ("A", "B", "C", "D") not in keys
+
+
+def test_fragility_conflicts_ignore_heavy_fragile_boxes_on_fragile_support():
+    bottom = PlacedBox(
+        sku_id="BOTTOM",
+        instance_index=0,
+        aabb=AABB(0, 0, 0, 400, 400, 200),
+        weight=1.0,
+        fragile=True,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+    top_fragile = PlacedBox(
+        sku_id="TOP-FRAGILE",
+        instance_index=0,
+        aabb=AABB(0, 0, 200, 400, 400, 400),
+        weight=5.0,
+        fragile=True,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+    top_non_fragile = PlacedBox(
+        sku_id="TOP-STURDY",
+        instance_index=0,
+        aabb=AABB(0, 0, 200, 400, 400, 400),
+        weight=5.0,
+        fragile=False,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+
+    assert _fragility_conflicts([bottom, top_fragile]) == []
+    assert _fragility_score_from_placements([bottom, top_fragile]) == 1.0
+    assert len(_fragility_conflicts([bottom, top_non_fragile])) == 1
+    assert _fragility_score_from_placements([bottom, top_non_fragile]) < 1.0
 
 
 def test_strict_fragility_search_gates_on_near_fit_heavy_fragile_requests():

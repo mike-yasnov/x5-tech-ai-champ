@@ -1,4 +1,7 @@
-"""Tests for solver.orientations."""
+"""Tests for solver.orientations.
+
+Tests enforce task spec compliance (docs/task.md). DO NOT MODIFY without explicit approval.
+"""
 
 from solver.models import Box
 from solver.orientations import get_orientations

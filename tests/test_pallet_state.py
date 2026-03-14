@@ -1,4 +1,7 @@
-"""Tests for solver.pallet_state."""
+"""Tests for solver.pallet_state.
+
+Tests enforce task spec compliance (docs/task.md). DO NOT MODIFY without explicit approval.
+"""
 
 import pytest
 
@@ -115,3 +118,28 @@ def test_max_z_tracking(state):
     assert state.max_z == 200
     state.place("B", 400, 300, 200, 0, 0, 200, 5.0)
     assert state.max_z == 400
+
+
+def test_stackable_false_no_xy_overlap_ok(state):
+    """Non-stackable box should not block placement with no XY overlap."""
+    state.place("A", 400, 300, 200, 0, 0, 0, 5.0, stackable=False)
+    # Place at same z=200 but different XY — no overlap with A
+    state.place("B", 400, 300, 200, 400, 0, 0, 5.0)
+    # Place on top of B (which IS stackable)
+    assert state.can_place(400, 300, 200, 400, 0, 200, 5.0)
+
+
+def test_fragile_box_tracking(state):
+    """get_fragile_boxes_at_top should return fragile boxes at given z."""
+    state.place("fragile", 400, 300, 200, 0, 0, 0, 1.0, fragile=True)
+    state.place("sturdy", 400, 300, 200, 400, 0, 0, 5.0, fragile=False)
+    fragile_at_200 = state.get_fragile_boxes_at_top(200, 0, 0, 400, 300)
+    assert len(fragile_at_200) == 1
+    assert fragile_at_200[0].sku_id == "fragile"
+
+
+def test_negative_coords_rejected(state):
+    """Negative coordinates should fail."""
+    assert not state.can_place(400, 300, 200, -1, 0, 0, 5.0)
+    assert not state.can_place(400, 300, 200, 0, -1, 0, 5.0)
+    assert not state.can_place(400, 300, 200, 0, 0, -1, 5.0)

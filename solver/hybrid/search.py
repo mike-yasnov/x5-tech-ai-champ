@@ -30,17 +30,26 @@ def _heuristic_score(c: Candidate, state: PalletState) -> float:
 
     # Penalize placing heavy items directly on fragile items below
     fragile_below_penalty = 0.0
-    if c.weight > FRAGILE_WEIGHT_THRESHOLD and c.aabb.z_min > 0:
+    if c.weight > FRAGILE_WEIGHT_THRESHOLD and c.aabb.z_min > 0 and not c.fragile:
         for pb in state.placed:
             if pb.fragile and abs(pb.aabb.z_max - c.aabb.z_min) < EPSILON:
                 if c.aabb.overlap_area_xy(pb.aabb) > 0:
                     fragile_below_penalty = 5.0
                     break
 
+    wall_count = 0
+    if c.aabb.x_min == 0 or c.aabb.x_max >= state.length:
+        wall_count += 1
+    if c.aabb.y_min == 0 or c.aabb.y_max >= state.width:
+        wall_count += 1
+    corner_touch = 1.0 if wall_count == 2 else 0.0
+
     return (
         -z_norm * 3.0
         + area_norm * 2.0
         + effective_weight * 1.0
+        + wall_count * 0.25
+        + corner_touch * 0.15
         - fragile_below_penalty
     )
 
