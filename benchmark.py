@@ -65,7 +65,7 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
+def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 900) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
@@ -245,7 +245,7 @@ def build_viz_data(results: list) -> list:
 def main():
     parser = argparse.ArgumentParser(description="Benchmark 3D Pallet Packing Solver")
     parser.add_argument(
-        "--restarts", type=int, default=10, help="Number of restarts (default: 10)"
+        "--restarts", type=int, default=30, help="Number of restarts (default: 30)"
     )
     parser.add_argument(
         "--output", "-o", default=None, help="Save detailed results to JSON file"
