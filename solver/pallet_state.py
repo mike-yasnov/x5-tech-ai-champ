@@ -1,0 +1,229 @@
+"""Pallet state: tracks placed boxes, extreme points, and validates constraints."""
+
+import logging
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
+
+from .models import Pallet
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PlacedBox:
+    """AABB of a placed box with metadata."""
+    sku_id: str
+    x_min: int
+    y_min: int
+    z_min: int
+    x_max: int
+    y_max: int
+    z_max: int
+    weight_kg: float
+    fragile: bool
+    stackable: bool
+
+    @property
+    def base_area(self) -> int:
+        return (self.x_max - self.x_min) * (self.y_max - self.y_min)
+
+
+def _overlap_area(
+    ax1: int, ay1: int, ax2: int, ay2: int,
+    bx1: int, by1: int, bx2: int, by2: int,
+) -> int:
+    """2D overlap area between two rectangles."""
+    dx = max(0, min(ax2, bx2) - max(ax1, bx1))
+    dy = max(0, min(ay2, by2) - max(ay1, by1))
+    return dx * dy
+
+
+def _aabb_collision(a: "PlacedBox", bx1: int, by1: int, bz1: int,
+                    bx2: int, by2: int, bz2: int) -> bool:
+    """Check strict AABB collision."""
+    return (
+        a.x_min < bx2 and a.x_max > bx1
+        and a.y_min < by2 and a.y_max > by1
+        and a.z_min < bz2 and a.z_max > bz1
+    )
+
+
+class PalletState:
+    """Mutable state of a pallet being packed."""
+
+    def __init__(self, pallet: Pallet):
+        self.pallet = pallet
+        self.boxes: List[PlacedBox] = []
+        self.current_weight: float = 0.0
+        self.max_z: int = 0
+        # Extreme Points: candidate positions (x, y, z)
+        self.extreme_points: List[Tuple[int, int, int]] = [(0, 0, 0)]
+
+    def can_place(
+        self,
+        dx: int, dy: int, dz: int,
+        x: int, y: int, z: int,
+        weight_kg: float,
+        fragile: bool = False,
+        stackable: bool = True,
+    ) -> bool:
+        """Check if placement is valid against all hard constraints."""
+        x2, y2, z2 = x + dx, y + dy, z + dz
+
+        # 1. Bounds check
+        if x < 0 or y < 0 or z < 0:
+            return False
+        if x2 > self.pallet.length_mm or y2 > self.pallet.width_mm or z2 > self.pallet.max_height_mm:
+            return False
+
+        # 2. Weight check
+        if self.current_weight + weight_kg > self.pallet.max_weight_kg + 1e-6:
+            return False
+
+        # 3. Collision check
+        for box in self.boxes:
+            if _aabb_collision(box, x, y, z, x2, y2, z2):
+                return False
+
+        # 4. Support check (gravity): ≥60% base area support
+        base_area = dx * dy
+        if z == 0:
+            pass  # Floor provides full support
+        else:
+            support_area = 0
+            for box in self.boxes:
+                if box.z_max == z:
+                    # Check stackable constraint
+                    if not box.stackable:
+                        overlap = _overlap_area(
+                            x, y, x2, y2,
+                            box.x_min, box.y_min, box.x_max, box.y_max,
+                        )
+                        if overlap > 0:
+                            return False
+                    support_area += _overlap_area(
+                        x, y, x2, y2,
+                        box.x_min, box.y_min, box.x_max, box.y_max,
+                    )
+            if base_area == 0 or support_area / base_area < 0.6:
+                return False
+
+        return True
+
+    def place(
+        self,
+        sku_id: str,
+        dx: int, dy: int, dz: int,
+        x: int, y: int, z: int,
+        weight_kg: float,
+        fragile: bool = False,
+        stackable: bool = True,
+    ) -> PlacedBox:
+        """Place a box and update state. Caller must verify can_place first."""
+        x2, y2, z2 = x + dx, y + dy, z + dz
+
+        placed = PlacedBox(
+            sku_id=sku_id,
+            x_min=x, y_min=y, z_min=z,
+            x_max=x2, y_max=y2, z_max=z2,
+            weight_kg=weight_kg,
+            fragile=fragile,
+            stackable=stackable,
+        )
+        self.boxes.append(placed)
+        self.current_weight += weight_kg
+        self.max_z = max(self.max_z, z2)
+
+        # Update extreme points
+        self._update_extreme_points(placed)
+
+        logger.info(
+            "[place] sku=%s pos=(%d,%d,%d) dims=(%d,%d,%d) weight=%.1f remaining_capacity=%.1f",
+            sku_id, x, y, z, dx, dy, dz, weight_kg,
+            self.pallet.max_weight_kg - self.current_weight,
+        )
+        logger.debug("[place] extreme_points_count=%d", len(self.extreme_points))
+
+        return placed
+
+    def _update_extreme_points(self, placed: PlacedBox) -> None:
+        """Generate new extreme points from 3 projections of placed box."""
+        new_eps = [
+            # Right face projection
+            (placed.x_max, placed.y_min, placed.z_min),
+            # Front face projection
+            (placed.x_min, placed.y_max, placed.z_min),
+            # Top face projection
+            (placed.x_min, placed.y_min, placed.z_max),
+        ]
+
+        # Remove EPs that are now inside the placed box
+        valid_eps = []
+        for ep in self.extreme_points:
+            ex, ey, ez = ep
+            inside = (
+                placed.x_min <= ex < placed.x_max
+                and placed.y_min <= ey < placed.y_max
+                and placed.z_min <= ez < placed.z_max
+            )
+            if not inside:
+                valid_eps.append(ep)
+
+        # Add new EPs that are within pallet bounds and not inside any existing box
+        for ep in new_eps:
+            ex, ey, ez = ep
+            if ex > self.pallet.length_mm or ey > self.pallet.width_mm or ez > self.pallet.max_height_mm:
+                continue
+            inside_any = False
+            for box in self.boxes:
+                if (
+                    box.x_min <= ex < box.x_max
+                    and box.y_min <= ey < box.y_max
+                    and box.z_min <= ez < box.z_max
+                ):
+                    inside_any = True
+                    break
+            if not inside_any:
+                valid_eps.append(ep)
+
+        # Deduplicate
+        self.extreme_points = list(set(valid_eps))
+
+    def get_fragile_boxes_at_top(self, z: int, x1: int, y1: int, x2: int, y2: int) -> List[PlacedBox]:
+        """Find fragile boxes whose top face is at z and overlap with given XY rectangle."""
+        result = []
+        for box in self.boxes:
+            if box.fragile and box.z_max == z:
+                if _overlap_area(x1, y1, x2, y2, box.x_min, box.y_min, box.x_max, box.y_max) > 0:
+                    result.append(box)
+        return result
+
+    def contact_area_with_neighbors(self, x: int, y: int, z: int, dx: int, dy: int, dz: int) -> int:
+        """Calculate total contact area with walls and adjacent boxes."""
+        x2, y2, z2 = x + dx, y + dy, z + dz
+        contact = 0
+
+        # Wall contacts (side faces touching pallet edges)
+        if x == 0:
+            contact += dy * dz
+        if y == 0:
+            contact += dx * dz
+        if x2 == self.pallet.length_mm:
+            contact += dy * dz
+        if y2 == self.pallet.width_mm:
+            contact += dx * dz
+
+        # Adjacent box contacts (faces touching)
+        for box in self.boxes:
+            # Right/left face contact
+            if box.x_max == x or box.x_min == x2:
+                oy = max(0, min(y2, box.y_max) - max(y, box.y_min))
+                oz = max(0, min(z2, box.z_max) - max(z, box.z_min))
+                contact += oy * oz
+            # Front/back face contact
+            if box.y_max == y or box.y_min == y2:
+                ox = max(0, min(x2, box.x_max) - max(x, box.x_min))
+                oz = max(0, min(z2, box.z_max) - max(z, box.z_min))
+                contact += ox * oz
+
+        return contact

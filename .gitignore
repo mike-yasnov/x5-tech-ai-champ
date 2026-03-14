@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / cache
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Generated data (request/response JSONs)
+request_*.json
+response_*.json
+
+# AI Factory internals
+.ai-factory.json
+.ai-factory/
+
+# Claude local settings
+.claude/settings.local.json
