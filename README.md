@@ -24,7 +24,8 @@
 │   ├── scoring.py         # Baseline scoring-функция
 │   ├── packer.py          # Baseline greedy packer
 │   ├── solver.py          # Публичный entrypoint: адаптер к hybrid solver
-│   ├── hybrid/            # Порт метода из sol/ (beam search + postprocess)
+│   ├── hybrid/            # Legacy hybrid beam search + postprocess
+│   ├── portfolio_block.py # Default solver: block portfolio + optional ranker
 │   ├── cli.py             # CLI-интерфейс
 │   └── __main__.py        # Запуск через python -m solver
 ├── tests/                 # Тесты
@@ -81,7 +82,8 @@ git checkout -b my-improvement
 
 | Файл | Что менять |
 |------|-----------|
-| `solver/hybrid/pipeline.py` | Оркестрация hybrid solver и параметры поиска |
+| `solver/portfolio_block.py` | Default solver: block portfolio, repair, optional ranking |
+| `solver/hybrid/pipeline.py` | Legacy hybrid solver и параметры поиска |
 | `solver/hybrid/search.py` | Beam search / greedy fallback и ranking |
 | `solver/hybrid/postprocess.py` | Уплотнение, fragile reorder, дозаполнение |
 | `solver/solver.py` | Публичный API и адаптер dataclass <-> request/response |
@@ -205,18 +207,18 @@ final_score = 0.50 × volume_utilization
 | random_mixed | **0.7023** | 0.8198 | 0.4579 | 0.5500 | 1.0000 | 49/107 | 112 |
 | **Average** | **0.6879** | | | | | | |
 
-> Дата: 2026-03-14. Это baseline-замер для greedy + multi-restart v1.0.0. Текущий default solver в репозитории уже использует hybrid search из `sol/`.
+> Дата: 2026-03-14. Это baseline-замер для greedy + multi-restart v1.0.0. Текущий default solver в репозитории использует `portfolio_block`, а legacy hybrid сохранён как отдельная стратегия.
 
 ## Архитектура текущего default-солвера
 
-**Extreme Points + Hybrid Beam Search + Postprocess**
+**Extreme Points + Block Portfolio + Repair + Postprocess**
 
 1. **Extreme Points** — генерация кандидатных позиций (не полный перебор x,y,z)
-2. **Candidate generation** — перебираем EP × ориентации с полными hard-constraint checks
-3. **Hybrid search** — beam search по последовательностям укладки, с эвристическим ranking и опциональной HYB-моделью
-4. **Postprocess** — compact-downward, fragile reorder, повторная вставка unplaced
+2. **Block candidates** — перебираем EP × ориентации × блоки `nx * ny * nz` с hard-constraint checks
+3. **Portfolio search** — несколько конструктивных политик (`foundation`, `fragile_last`, `coverage_fill`, `legacy_portfolio`) и optional XGBoost ranker
+4. **Repair + Postprocess** — локальный repair, compact-downward, fragile reorder, повторная вставка unplaced
 
-Baseline greedy-модули (`solver/packer.py`, `solver/scoring.py`, `solver/pallet_state.py`) сохранены для unit-тестов и сравнительных бенчмарков.
+Baseline greedy-модули (`solver/packer.py`, `solver/scoring.py`, `solver/pallet_state.py`) и legacy hybrid сохранены для unit-тестов и сравнительных бенчмарков.
 
 ## Направления улучшений
 
