@@ -22,6 +22,7 @@ WEIGHT_PROFILES = {
     "fragile_avoid": (0.25, 0.20, 0.25, 0.15, 0.15),
     "compact": (0.30, 0.25, 0.05, 0.25, 0.15),
     "wall_hugger": (0.20, 0.35, 0.10, 0.15, 0.20),
+    "fragile_strict": (0.15, 0.20, 0.40, 0.15, 0.10),  # Very strong fragile avoidance
 }
 
 

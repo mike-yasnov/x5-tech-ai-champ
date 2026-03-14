@@ -475,6 +475,194 @@ def pack_two_phase(
     )
 
 
+def pack_greedy_with_order(
+    task_id: str,
+    pallet: Pallet,
+    order: List[Tuple[Box, int]],
+    weight_profile: str = "default",
+) -> Solution:
+    """Pack boxes in a given order (list of (box, instance_index) pairs).
+
+    Used by local search to evaluate permutations of item order.
+    """
+    t0 = time.perf_counter()
+    state = PalletState(pallet)
+    placements: List[Placement] = []
+    unplaced_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0})
+
+    for box, inst_idx in order:
+        orientations = get_orientations(box)
+        best_score = -1.0
+        best_placement = None
+
+        for ep in list(state.extreme_points):
+            ex, ey, ez = ep
+            for dx, dy, dz, rot_code in orientations:
+                if not state.can_place(
+                    dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile, box.stackable,
+                ):
+                    continue
+                sc = score_placement(
+                    state, dx, dy, dz, ex, ey, ez,
+                    box.weight_kg, box.fragile,
+                    weight_profile=weight_profile,
+                )
+                if sc > best_score:
+                    best_score = sc
+                    best_placement = (dx, dy, dz, ex, ey, ez, rot_code)
+
+        if best_placement is not None:
+            dx, dy, dz, px, py, pz, rot_code = best_placement
+            state.place(
+                box.sku_id, dx, dy, dz, px, py, pz,
+                box.weight_kg, box.fragile, box.stackable,
+            )
+            placements.append(Placement(
+                sku_id=box.sku_id, instance_index=inst_idx,
+                x_mm=px, y_mm=py, z_mm=pz,
+                length_mm=dx, width_mm=dy, height_mm=dz,
+                rotation_code=rot_code,
+            ))
+        else:
+            if state.current_weight + box.weight_kg > pallet.max_weight_kg:
+                reason = "weight_limit_exceeded"
+            else:
+                reason = "no_space"
+            unplaced_counts[box.sku_id]["count"] += 1
+            unplaced_counts[box.sku_id]["reason"] = reason
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    unplaced = [
+        UnplacedItem(sku_id=sid, quantity_unplaced=info["count"], reason=info["reason"])
+        for sid, info in unplaced_counts.items()
+    ]
+
+    return Solution(
+        task_id=task_id,
+        solver_version=__version__,
+        solve_time_ms=elapsed_ms,
+        placements=placements,
+        unplaced=unplaced,
+    )
+
+
+def pack_beam_search(
+    task_id: str,
+    pallet: Pallet,
+    boxes: List[Box],
+    sort_key_name: str = "volume_desc",
+    weight_profile: str = "default",
+    beam_width: int = 4,
+    time_limit_ms: int = 500,
+) -> Solution:
+    """Beam search packer: keep top-K partial solutions at each step.
+
+    More expensive than greedy but explores multiple packing arrangements.
+    """
+    import copy
+    t0 = time.perf_counter()
+
+    sort_fn = SORT_KEYS.get(sort_key_name, _sort_volume_desc)
+    sorted_boxes = sorted(boxes, key=sort_fn)
+    instances = _expand_boxes(sorted_boxes)
+
+    # Each beam entry: (state, placements, total_score)
+    initial_state = PalletState(pallet)
+    beam = [(initial_state, [], 0.0)]
+
+    for item_idx, (box, inst_idx) in enumerate(instances):
+        elapsed = (time.perf_counter() - t0) * 1000
+        if elapsed > time_limit_ms * 0.9:
+            break
+
+        orientations = get_orientations(box)
+        candidates = []
+
+        for state, placements, cumulative_score in beam:
+            # Try all EPs × orientations for this beam entry
+            item_candidates = []
+            for ep in list(state.extreme_points):
+                ex, ey, ez = ep
+                for dx, dy, dz, rot_code in orientations:
+                    if not state.can_place(
+                        dx, dy, dz, ex, ey, ez,
+                        box.weight_kg, box.fragile, box.stackable,
+                    ):
+                        continue
+                    sc = score_placement(
+                        state, dx, dy, dz, ex, ey, ez,
+                        box.weight_kg, box.fragile,
+                        weight_profile=weight_profile,
+                    )
+                    item_candidates.append((sc, dx, dy, dz, ex, ey, ez, rot_code))
+
+            if not item_candidates:
+                # Item can't be placed in this beam, carry forward without it
+                candidates.append((cumulative_score - 0.01, state, placements))
+                continue
+
+            # Keep top beam_width placements for this beam entry
+            item_candidates.sort(key=lambda x: -x[0])
+            for sc, dx, dy, dz, px, py, pz, rot_code in item_candidates[:beam_width]:
+                new_state = copy.deepcopy(state)
+                new_state.place(
+                    box.sku_id, dx, dy, dz, px, py, pz,
+                    box.weight_kg, box.fragile, box.stackable,
+                )
+                new_placements = placements + [Placement(
+                    sku_id=box.sku_id, instance_index=inst_idx,
+                    x_mm=px, y_mm=py, z_mm=pz,
+                    length_mm=dx, width_mm=dy, height_mm=dz,
+                    rotation_code=rot_code,
+                )]
+                candidates.append((cumulative_score + sc, new_state, new_placements))
+
+        # Prune beam to top-K
+        candidates.sort(key=lambda x: -x[0])
+        beam = [(s, p, score) for score, s, p in candidates[:beam_width]]
+
+    # Pick best beam entry by placement count, then cumulative score
+    best_placements = []
+    best_count = 0
+    best_score = -1.0
+    for state, placements, cum_score in beam:
+        if len(placements) > best_count or (len(placements) == best_count and cum_score > best_score):
+            best_count = len(placements)
+            best_score = cum_score
+            best_placements = placements
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    # Build unplaced
+    placed_counts: Dict[str, int] = defaultdict(int)
+    for p in best_placements:
+        placed_counts[p.sku_id] += 1
+    unplaced = []
+    for box in boxes:
+        placed = placed_counts.get(box.sku_id, 0)
+        if placed < box.quantity:
+            unplaced.append(UnplacedItem(
+                sku_id=box.sku_id,
+                quantity_unplaced=box.quantity - placed,
+                reason="no_space",
+            ))
+
+    logger.info(
+        "[pack_beam] done sort=%s profile=%s beam=%d placed=%d time=%dms",
+        sort_key_name, weight_profile, beam_width,
+        len(best_placements), elapsed_ms,
+    )
+
+    return Solution(
+        task_id=task_id,
+        solver_version=__version__,
+        solve_time_ms=elapsed_ms,
+        placements=best_placements,
+        unplaced=unplaced,
+    )
+
+
 MAX_BESTFIT_ITEMS = 50  # Only use for small instances
 
 
