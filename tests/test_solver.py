@@ -12,10 +12,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from generator import generate_scenario
 from validator import evaluate_solution
 from solver.models import load_request, solution_to_dict, Pallet, Box
+from solver.packer import SORT_KEYS, pack_greedy
 from solver.solver import solve
 
 
-SCENARIOS = ["heavy_water", "fragile_tower", "liquid_tetris", "random_mixed"]
+SCENARIOS = [
+    "heavy_water",
+    "fragile_tower",
+    "liquid_tetris",
+    "random_mixed",
+    "exact_fit",
+    "fragile_mix",
+    "support_tetris",
+    "cavity_fill",
+]
 
 
 def _make_request_dict(scenario_type: str, seed: int = 42) -> dict:
@@ -35,18 +45,20 @@ def _request_to_models(request_dict: dict):
     )
     boxes = []
     for b in request_dict["boxes"]:
-        boxes.append(Box(
-            sku_id=b["sku_id"],
-            description=b.get("description", ""),
-            length_mm=b["length_mm"],
-            width_mm=b["width_mm"],
-            height_mm=b["height_mm"],
-            weight_kg=b["weight_kg"],
-            quantity=b["quantity"],
-            strict_upright=b.get("strict_upright", False),
-            fragile=b.get("fragile", False),
-            stackable=b.get("stackable", True),
-        ))
+        boxes.append(
+            Box(
+                sku_id=b["sku_id"],
+                description=b.get("description", ""),
+                length_mm=b["length_mm"],
+                width_mm=b["width_mm"],
+                height_mm=b["height_mm"],
+                weight_kg=b["weight_kg"],
+                quantity=b["quantity"],
+                strict_upright=b.get("strict_upright", False),
+                fragile=b.get("fragile", False),
+                stackable=b.get("stackable", True),
+            )
+        )
     return request_dict["task_id"], pallet, boxes
 
 
@@ -68,7 +80,9 @@ def test_scenario_produces_valid_solution(scenario_type):
     response_dict = solution_to_dict(solution)
     result = evaluate_solution(request_dict, response_dict)
 
-    assert result["valid"] is True, f"Invalid solution for {scenario_type}: {result.get('error')}"
+    assert result["valid"] is True, (
+        f"Invalid solution for {scenario_type}: {result.get('error')}"
+    )
 
 
 @pytest.mark.parametrize("scenario_type", SCENARIOS)
@@ -91,7 +105,9 @@ def test_scenario_score_positive(scenario_type):
 
     assert result["valid"]
     assert result["final_score"] > 0, f"Score should be positive for {scenario_type}"
-    print(f"\n  {scenario_type}: score={result['final_score']:.4f} metrics={result['metrics']}")
+    print(
+        f"\n  {scenario_type}: score={result['final_score']:.4f} metrics={result['metrics']}"
+    )
 
 
 @pytest.mark.parametrize("scenario_type", SCENARIOS)
@@ -143,3 +159,77 @@ def test_solution_format_complete():
         assert "z_mm" in p["position"]
         assert "dimensions_placed" in p
         assert "rotation_code" in p
+
+
+def test_exact_fit_scenario_is_near_perfect():
+    """Exact-fit scenario should have no free space and a near-perfect score."""
+    request_dict = _make_request_dict("exact_fit")
+    task_id, pallet, boxes = _request_to_models(request_dict)
+
+    solution = solve(
+        task_id=task_id,
+        pallet=pallet,
+        boxes=boxes,
+        request_dict=request_dict,
+        n_restarts=5,
+        time_budget_ms=5000,
+    )
+
+    result = evaluate_solution(request_dict, solution_to_dict(solution))
+
+    assert result["valid"] is True
+    assert len(solution.unplaced) == 0
+    assert result["metrics"]["volume_utilization"] == pytest.approx(1.0)
+    assert result["metrics"]["item_coverage"] == pytest.approx(1.0)
+    assert result["final_score"] >= 0.99
+
+
+@pytest.mark.parametrize(
+    "scenario_type,min_score",
+    [
+        ("fragile_mix", 0.90),
+        ("support_tetris", 0.85),
+    ],
+)
+def test_diagnostic_scenarios_score_well(scenario_type, min_score):
+    request_dict = _make_request_dict(scenario_type)
+    task_id, pallet, boxes = _request_to_models(request_dict)
+
+    solution = solve(
+        task_id=task_id,
+        pallet=pallet,
+        boxes=boxes,
+        request_dict=request_dict,
+        n_restarts=8,
+        time_budget_ms=5000,
+    )
+
+    result = evaluate_solution(request_dict, solution_to_dict(solution))
+
+    assert result["valid"] is True
+    assert result["final_score"] >= min_score
+
+
+@pytest.mark.parametrize(
+    "scenario_type,min_spread",
+    [
+        ("fragile_mix", 0.015),
+    ],
+)
+def test_diagnostic_scenarios_separate_strategies(scenario_type, min_spread):
+    request_dict = _make_request_dict(scenario_type)
+    task_id, pallet, boxes = _request_to_models(request_dict)
+
+    scores = []
+    for strategy_name in SORT_KEYS:
+        solution = pack_greedy(
+            task_id=task_id,
+            pallet=pallet,
+            boxes=boxes,
+            sort_key_name=strategy_name,
+        )
+        result = evaluate_solution(request_dict, solution_to_dict(solution))
+        assert result["valid"] is True
+        scores.append(result["final_score"])
+
+    assert max(scores) - min(scores) >= min_spread
