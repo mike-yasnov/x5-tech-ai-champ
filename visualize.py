@@ -202,6 +202,14 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
     background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 6px;
     font-size: 12px; pointer-events: none; white-space: nowrap;
   }}
+  #slider-wrap {{
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+    background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px;
+    display: flex; align-items: center; gap: 12px; backdrop-filter: blur(8px);
+  }}
+  #slider-wrap label {{ color: #aaa; font-size: 12px; white-space: nowrap; }}
+  #slider-wrap input[type="range"] {{ width: 200px; accent-color: #7BAAF7; }}
+  #slider-wrap .step-value {{ color: #fff; font-weight: 600; min-width: 4ch; }}
   canvas {{ display: block; }}
 </style>
 </head>
@@ -217,6 +225,11 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
 
 <div id="legend"></div>
 <div id="tooltip"></div>
+<div id="slider-wrap">
+  <label for="step-slider">Шаг укладки:</label>
+  <input type="range" id="step-slider" min="0" max="1" value="1" step="1">
+  <span class="step-value" id="step-value">0 / 0</span>
+</div>
 
 <script type="importmap">
 {{
@@ -312,6 +325,7 @@ scene.add(limitLine);
 // Box meshes
 const boxMeshes = [];
 const boxData = [];
+const placedBoxNodes = [];
 
 BOXES.forEach((box, i) => {{
   const geo = new THREE.BoxGeometry(box.dx * S, box.dy * S, box.dz * S);
@@ -333,13 +347,12 @@ BOXES.forEach((box, i) => {{
   mesh.receiveShadow = true;
   scene.add(mesh);
 
-  // Wireframe edges
   const edges = new THREE.EdgesGeometry(geo);
   const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x000000, transparent: true, opacity: 0.3 }}));
   line.position.copy(mesh.position);
   scene.add(line);
 
-  // Marker: 3D cross for fragility violation (heavy on fragile), sphere for fragile only
+  let marker = null;
   const cx = (box.x + box.dx / 2) * S;
   const cyTop = (box.y + box.dy) * S + 0.005;
   const cz = (box.z + box.dz / 2) * S;
@@ -347,19 +360,19 @@ BOXES.forEach((box, i) => {{
   if (box.fragility_violation_bottom) {{
     const r = Math.min(box.dx, box.dz) * S * 0.2;
     const t = r * 0.2;
-    const cross = new THREE.Group();
-    cross.add(new THREE.Mesh(new THREE.BoxGeometry(r * 2, t, t), markerMat));
-    cross.add(new THREE.Mesh(new THREE.BoxGeometry(t, r * 2, t), markerMat));
-    cross.add(new THREE.Mesh(new THREE.BoxGeometry(t, t, r * 2), markerMat));
-    cross.position.set(cx, cyTop, cz);
-    scene.add(cross);
+    marker = new THREE.Group();
+    marker.add(new THREE.Mesh(new THREE.BoxGeometry(r * 2, t, t), markerMat));
+    marker.add(new THREE.Mesh(new THREE.BoxGeometry(t, r * 2, t), markerMat));
+    marker.add(new THREE.Mesh(new THREE.BoxGeometry(t, t, r * 2), markerMat));
+    marker.position.set(cx, cyTop, cz);
+    scene.add(marker);
   }} else if (box.fragile) {{
-    const markerGeo = new THREE.SphereGeometry(Math.min(box.dx, box.dz) * S * 0.15, 8, 8);
-    const marker = new THREE.Mesh(markerGeo, markerMat);
+    marker = new THREE.Mesh(new THREE.SphereGeometry(Math.min(box.dx, box.dz) * S * 0.15, 8, 8), markerMat);
     marker.position.set(cx, cyTop, cz);
     scene.add(marker);
   }}
 
+  placedBoxNodes.push({{ mesh, line, marker }});
   boxMeshes.push(mesh);
   boxData.push({{ ...box, unplaced: false }});
 }});
@@ -407,6 +420,30 @@ skuSet.forEach((v, sku) => {{
   item.innerHTML = `<div class="swatch" style="background:${{v.color}}"></div>${{label}}`;
   legend.appendChild(item);
 }});
+
+// Step slider: show only first N placed boxes
+const stepSlider = document.getElementById('step-slider');
+const stepValueEl = document.getElementById('step-value');
+const totalPlaced = BOXES.length;
+stepSlider.min = 0;
+stepSlider.max = Math.max(1, totalPlaced);
+stepSlider.value = totalPlaced;
+stepSlider.step = 1;
+stepValueEl.textContent = totalPlaced + ' / ' + totalPlaced;
+function updateStepVisibility(step) {{
+  const n = Math.max(0, Math.min(step, totalPlaced));
+  placedBoxNodes.forEach((node, i) => {{
+    const visible = i < n;
+    node.mesh.visible = visible;
+    node.line.visible = visible;
+    if (node.marker) node.marker.visible = visible;
+  }});
+  stepValueEl.textContent = n + ' / ' + totalPlaced;
+}}
+stepSlider.addEventListener('input', () => updateStepVisibility(parseInt(stepSlider.value, 10)));
+if (totalPlaced === 0) {{
+  document.getElementById('slider-wrap').style.display = 'none';
+}}
 
 // Tooltip on hover
 const raycaster = new THREE.Raycaster();
