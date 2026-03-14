@@ -186,8 +186,8 @@ class PalletState:
             if not inside_any:
                 valid_eps.append(ep)
 
-        # Deduplicate
-        self.extreme_points = list(set(valid_eps))
+        # Deduplicate while preserving deterministic order
+        self.extreme_points = sorted(set(valid_eps))
 
     def get_fragile_boxes_at_top(self, z: int, x1: int, y1: int, x2: int, y2: int) -> List[PlacedBox]:
         """Find fragile boxes whose top face is at z and overlap with given XY rectangle."""

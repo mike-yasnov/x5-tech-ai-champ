@@ -64,7 +64,7 @@ def _request_to_models(request_dict: dict):
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
+def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 900) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)

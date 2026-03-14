@@ -15,8 +15,16 @@ def main():
         prog="python -m solver",
     )
     parser.add_argument(
-        "inputs", nargs="+",
+        "inputs", nargs="*",
         help="Request JSON file(s)",
+    )
+    parser.add_argument(
+        "--train-ml", action="store_true",
+        help="Train ML layer ranker model",
+    )
+    parser.add_argument(
+        "--n-instances", type=int, default=200,
+        help="Number of instances for ML training (default: 200)",
     )
     parser.add_argument(
         "-o", "--output", default=None,
@@ -43,6 +51,17 @@ def main():
         format="[%(levelname)s %(name)s] %(message)s",
         stream=sys.stderr,
     )
+
+    if args.train_ml:
+        from .models import Pallet
+        from .ml_ranker import train_ranker
+        # Use standard europallet for training
+        pallet = Pallet("EUR_1200x800", 1200, 800, 1800, 1000.0)
+        train_ranker(pallet, n_instances=args.n_instances)
+        return
+
+    if not args.inputs:
+        parser.error("Please provide input JSON file(s) or use --train-ml")
 
     for input_path in args.inputs:
         task_id, pallet, boxes = load_request(input_path)

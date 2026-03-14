@@ -1,4 +1,4 @@
-"""Multi-restart solver: runs greedy packer with different sort strategies."""
+"""Solver: greedy multi-restart + paper-based layer method (Dell'Amico et al.)."""
 
 import logging
 import sys
@@ -7,6 +7,9 @@ from typing import List, Optional
 
 from .models import Box, Pallet, Solution, solution_to_dict
 from .packer import SORT_KEYS, pack_greedy
+from .build_layers import build_layers
+from .layer_stacker import stack_layers, LAYER_SORT_STRATEGIES
+from .ml_ranker import predict_layer_scores
 
 # Add project root to path for validator import
 sys.path.insert(0, ".")
@@ -32,6 +35,13 @@ def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
         return None
 
 
+def _score_or_fallback(request_dict: dict, solution: Solution, boxes: List[Box]) -> float:
+    score = _evaluate_score(request_dict, solution)
+    if score is not None:
+        return score
+    return len(solution.placements) / max(1, sum(b.quantity for b in boxes))
+
+
 def solve(
     task_id: str,
     pallet: Pallet,
@@ -40,64 +50,98 @@ def solve(
     n_restarts: int = 10,
     time_budget_ms: int = 900,
 ) -> Solution:
-    """Run greedy packer with multiple sort strategies and return the best solution.
+    """Run multiple strategies and return the best solution.
 
-    Args:
-        task_id: Task identifier
-        pallet: Pallet parameters
-        boxes: List of box types
-        request_dict: Original request dict for validator
-        n_restarts: Maximum number of restarts
-        time_budget_ms: Total time budget in milliseconds
+    Pipeline:
+    1. Greedy multi-restart (baseline, fast)
+    2. Paper method: BuildLayers → ML ranking → layer stacking
     """
     t0 = time.perf_counter()
     best_solution: Optional[Solution] = None
     best_score: float = -1.0
-    best_key: str = ""
+    best_method: str = ""
 
     sort_key_names = list(SORT_KEYS.keys())
 
-    logger.info(
-        "[solve] task=%s restarts=%d budget=%dms strategies=%s",
-        task_id, n_restarts, time_budget_ms, sort_key_names,
-    )
+    def _elapsed() -> float:
+        return (time.perf_counter() - t0) * 1000
 
-    for i in range(min(n_restarts, len(sort_key_names))):
-        elapsed = (time.perf_counter() - t0) * 1000
-        if elapsed > time_budget_ms * 0.9:
-            logger.info("[solve] time budget approaching, stopping at restart %d", i)
-            break
-
-        key_name = sort_key_names[i]
-        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name)
-
-        score = _evaluate_score(request_dict, solution)
-        if score is None:
-            # Fallback: use placement count as proxy
+    def _update_best(solution: Solution, method: str) -> None:
+        nonlocal best_solution, best_score, best_method
+        # Only accept valid solutions
+        validity_score = _evaluate_score(request_dict, solution)
+        if validity_score is None:
+            # Validator not available, use fallback
             score = len(solution.placements) / max(1, sum(b.quantity for b in boxes))
-
-        logger.info(
-            "[solve] restart=%d sort=%s score=%.4f placed=%d",
-            i, key_name, score, len(solution.placements),
-        )
+        elif validity_score == 0.0:
+            # Score of 0 from validator means constraints failed somewhere
+            logger.debug("[solve] %s: score=0, skipping", method)
+            return
+        else:
+            score = validity_score
 
         if score > best_score:
             best_score = score
             best_solution = solution
-            best_key = key_name
+            best_method = method
+            logger.info("[solve] new best: %s score=%.4f placed=%d", method, score, len(solution.placements))
 
-    # Update solve_time_ms to total time
-    total_ms = int((time.perf_counter() - t0) * 1000)
+    # ── Phase 1: Greedy multi-restart (budget: 50%) ──────────────────
+    logger.info(
+        "[solve] task=%s budget=%dms greedy_strategies=%d",
+        task_id, time_budget_ms, len(sort_key_names),
+    )
+
+    for i, key_name in enumerate(sort_key_names):
+        if _elapsed() > time_budget_ms * 0.45:
+            logger.debug("[solve] greedy phase limit, ran %d/%d", i, len(sort_key_names))
+            break
+        solution = pack_greedy(task_id, pallet, boxes, sort_key_name=key_name)
+        _update_best(solution, f"greedy/{key_name}")
+
+    # ── Phase 2: Paper method — BuildLayers + stacking (only if budget allows) ─
+    total_items = sum(b.quantity for b in boxes)
+    elapsed_after_greedy = _elapsed()
+    # Conservative gate: need ≥70% budget remaining AND ≤40 items
+    if elapsed_after_greedy < time_budget_ms * 0.25 and total_items <= 40:
+        try:
+            layers = build_layers(pallet, boxes, seed=42)
+            logger.info("[solve] paper method: %d layers generated in %.0fms",
+                        len(layers), _elapsed() - elapsed_after_greedy)
+
+            # Bail if build_layers consumed too much time
+            if layers and _elapsed() < time_budget_ms * 0.55:
+                # Try density stacking
+                solution = stack_layers(
+                    task_id, pallet, boxes, layers,
+                    sort_strategy="density",
+                )
+                _update_best(solution, "paper/density")
+
+                # Try ML ranking if we still have time
+                if _elapsed() < time_budget_ms * 0.65:
+                    ml_scores = predict_layer_scores(boxes, layers)
+                    if ml_scores:
+                        solution = stack_layers(
+                            task_id, pallet, boxes, layers,
+                            layer_scores=ml_scores,
+                        )
+                        _update_best(solution, "paper/ml_ranked")
+
+        except Exception as e:
+            logger.warning("[solve] paper method failed: %s", e)
+
+    # Update total time
+    total_ms = int(_elapsed())
     if best_solution is not None:
         best_solution.solve_time_ms = total_ms
 
     logger.info(
-        "[solve] done best_sort=%s best_score=%.4f total_time=%dms",
-        best_key, best_score, total_ms,
+        "[solve] done method=%s score=%.4f total_time=%dms",
+        best_method, best_score, total_ms,
     )
 
     if best_solution is None:
-        # Should not happen, but return empty solution as fallback
         from . import __version__
         return Solution(
             task_id=task_id,
