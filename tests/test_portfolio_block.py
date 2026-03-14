@@ -185,7 +185,7 @@ def test_default_solve_dispatches_to_portfolio(monkeypatch):
 
     called = {"portfolio": False, "hybrid": False}
 
-    def fake_portfolio_request(request, model_dir="models", time_budget_ms=900):
+    def fake_portfolio_request(request, model_dir="models", time_budget_ms=900, score_weights=None):
         called["portfolio"] = True
         return {
             "task_id": request["task_id"],

@@ -210,7 +210,10 @@ def solve_request(
     request: Dict[str, Any],
     model_dir: str | Path = "models",
     time_budget_ms: int = 900,
+    score_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
+    global _active_score_weights
+    _active_score_weights = score_weights
     checker, candidate_gen, total_items = _init_common_components(request)
     fingerprint = compute_request_fingerprint(request)
     selector = _load_optional_selector(model_dir) if fingerprint.total_items <= 120 else None
@@ -2659,6 +2662,7 @@ def _top_level_run_sort_key(
     volume_util = placed_volume / max(pallet_volume, 1)
     coverage = len(run.placements) / max(total_items, 1)
     fragility_score = _fragility_score_from_placements(run.placements)
+    w_vol, w_cov, w_frag = _proxy_weights_no_time(_active_score_weights)
     fingerprint = compute_request_fingerprint(request)
     near_fit_fragile_chaos = (
         fingerprint.volume_ratio <= 1.10
@@ -2668,17 +2672,13 @@ def _top_level_run_sort_key(
         )
     )
     if near_fit_fragile_chaos:
-        conservative_score = (
-            0.40 * volume_util
-            + 0.20 * coverage
-            + 0.40 * fragility_score
-        )
-    else:
-        conservative_score = (
-            0.50 * volume_util
-            + 0.30 * coverage
-            + 0.20 * fragility_score
-        )
+        # Boost fragility weight for chaotic scenarios
+        w_frag = max(w_frag, 0.35)
+        total_w = w_vol + w_cov + w_frag
+        w_vol /= total_w
+        w_cov /= total_w
+        w_frag /= total_w
+    conservative_score = w_vol * volume_util + w_cov * coverage + w_frag * fragility_score
     return (conservative_score, -run.elapsed_ms)
 
 
@@ -2722,6 +2722,36 @@ def _rank_extreme_points(
     return ranked
 
 
+def _normalize_weights(score_weights: Optional[Dict[str, float]]) -> Dict[str, float]:
+    """Normalize score_weights to sum to 1.0, falling back to defaults."""
+    defaults = {
+        "volume_utilization": 50.0,
+        "item_coverage": 30.0,
+        "fragility_score": 10.0,
+        "time_score": 10.0,
+    }
+    raw = {k: max(0.0, float((score_weights or {}).get(k, v))) for k, v in defaults.items()}
+    total = sum(raw.values())
+    if total <= 0:
+        raw = dict(defaults)
+        total = sum(raw.values())
+    return {k: v / total for k, v in raw.items()}
+
+
+def _proxy_weights_no_time(score_weights: Optional[Dict[str, float]]) -> Tuple[float, float, float]:
+    """Return (w_vol, w_cov, w_frag) with time_score redistributed proportionally."""
+    w = _normalize_weights(score_weights)
+    non_time = max(w["volume_utilization"] + w["item_coverage"] + w["fragility_score"], 1e-9)
+    w_vol = w["volume_utilization"] + w["time_score"] * w["volume_utilization"] / non_time
+    w_cov = w["item_coverage"] + w["time_score"] * w["item_coverage"] / non_time
+    w_frag = w["fragility_score"] + w["time_score"] * w["fragility_score"] / non_time
+    return w_vol, w_cov, w_frag
+
+
+# Module-level active score weights, set by solve_request for the duration of a solve call.
+_active_score_weights: Optional[Dict[str, float]] = None
+
+
 def _solution_proxy(state: PalletState, total_items: int) -> float:
     placements = state.placed
     vol_util = state.placed_volume / max(state.pallet_volume, 1)
@@ -2739,7 +2769,8 @@ def _solution_proxy(state: PalletState, total_items: int) -> float:
                 if top.aabb.overlap_area_xy(bottom.aabb) > 0:
                     fragility_violations += 1
     fragility_score = max(0.0, 1.0 - 0.05 * fragility_violations)
-    return 0.50 * vol_util + 0.30 * coverage + 0.10 * fragility_score
+    w_vol, w_cov, w_frag = _proxy_weights_no_time(_active_score_weights)
+    return w_vol * vol_util + w_cov * coverage + w_frag * fragility_score
 
 
 def _rebuild_state(

@@ -33,8 +33,8 @@
     },
     "placed": 1,
     "total_items": 1,
-    "solve_time_ms": 1,
-    "wall_time_ms": 868,
+    "solve_time_ms": 2,
+    "wall_time_ms": 1022,
     "error": null
   },
   {
@@ -71,8 +71,8 @@
     },
     "placed": 4,
     "total_items": 4,
-    "solve_time_ms": 2,
-    "wall_time_ms": 3,
+    "solve_time_ms": 3,
+    "wall_time_ms": 4,
     "error": null
   },
   {
@@ -109,8 +109,8 @@
     },
     "placed": 8,
     "total_items": 8,
-    "solve_time_ms": 7,
-    "wall_time_ms": 7,
+    "solve_time_ms": 8,
+    "wall_time_ms": 9,
     "error": null
   },
   {
@@ -147,7 +147,7 @@
     },
     "placed": 1,
     "total_items": 1,
-    "solve_time_ms": 0,
+    "solve_time_ms": 1,
     "wall_time_ms": 1,
     "error": null
   },
@@ -179,7 +179,7 @@
     },
     "placed": 1,
     "total_items": 1,
-    "solve_time_ms": 0,
+    "solve_time_ms": 1,
     "wall_time_ms": 1,
     "error": null
   },
@@ -249,8 +249,8 @@
     },
     "placed": 27,
     "total_items": 27,
-    "solve_time_ms": 44,
-    "wall_time_ms": 45,
+    "solve_time_ms": 49,
+    "wall_time_ms": 49,
     "error": null
   },
   {
@@ -325,8 +325,8 @@
     },
     "placed": 64,
     "total_items": 64,
-    "solve_time_ms": 85,
-    "wall_time_ms": 85,
+    "solve_time_ms": 90,
+    "wall_time_ms": 91,
     "error": null
   },
   {
@@ -363,8 +363,8 @@
     },
     "placed": 2,
     "total_items": 2,
-    "solve_time_ms": 1,
-    "wall_time_ms": 2,
+    "solve_time_ms": 2,
+    "wall_time_ms": 3,
     "error": null
   },
   {
@@ -434,7 +434,7 @@
     "placed": 5,
     "total_items": 5,
     "solve_time_ms": 2,
-    "wall_time_ms": 2,
+    "wall_time_ms": 3,
     "error": null
   },
   {
@@ -471,8 +471,8 @@
     },
     "placed": 3,
     "total_items": 3,
-    "solve_time_ms": 1,
-    "wall_time_ms": 1,
+    "solve_time_ms": 3,
+    "wall_time_ms": 4,
     "error": null
   },
   {
@@ -503,7 +503,7 @@
     },
     "placed": 1,
     "total_items": 1,
-    "solve_time_ms": 0,
+    "solve_time_ms": 1,
     "wall_time_ms": 1,
     "error": null
   },
@@ -579,8 +579,8 @@
     },
     "placed": 8,
     "total_items": 8,
-    "solve_time_ms": 3,
-    "wall_time_ms": 4,
+    "solve_time_ms": 4,
+    "wall_time_ms": 5,
     "error": null
   },
   {
@@ -681,7 +681,7 @@
     },
     "placed": 1,
     "total_items": 1,
-    "solve_time_ms": 0,
+    "solve_time_ms": 1,
     "wall_time_ms": 1,
     "error": null
   },
@@ -790,7 +790,7 @@
     "placed": 4,
     "total_items": 4,
     "solve_time_ms": 2,
-    "wall_time_ms": 2,
+    "wall_time_ms": 3,
     "error": null
   },
   {
@@ -821,7 +821,7 @@
     },
     "placed": 1,
     "total_items": 2,
-    "solve_time_ms": 1,
+    "solve_time_ms": 2,
     "wall_time_ms": 2,
     "error": null
   },
@@ -885,7 +885,7 @@
     },
     "placed": 4,
     "total_items": 5,
-    "solve_time_ms": 2,
+    "solve_time_ms": 3,
     "wall_time_ms": 3,
     "error": null
   },
@@ -918,7 +918,7 @@
     "placed": 4,
     "total_items": 5,
     "solve_time_ms": 4,
-    "wall_time_ms": 4,
+    "wall_time_ms": 5,
     "error": null
   },
   {
@@ -981,8 +981,8 @@
     },
     "placed": 4,
     "total_items": 4,
-    "solve_time_ms": 4,
-    "wall_time_ms": 4,
+    "solve_time_ms": 5,
+    "wall_time_ms": 5,
     "error": null
   },
   {
@@ -1013,7 +1013,7 @@
     },
     "placed": 4,
     "total_items": 4,
-    "solve_time_ms": 4,
+    "solve_time_ms": 5,
     "wall_time_ms": 5,
     "error": null
   },
@@ -1052,7 +1052,7 @@
     "placed": 2,
     "total_items": 2,
     "solve_time_ms": 1,
-    "wall_time_ms": 2,
+    "wall_time_ms": 1,
     "error": null
   },
   {
@@ -1083,8 +1083,8 @@
     },
     "placed": 8,
     "total_items": 8,
-    "solve_time_ms": 28,
-    "wall_time_ms": 29,
+    "solve_time_ms": 31,
+    "wall_time_ms": 32,
     "error": null
   },
   {
@@ -1122,7 +1122,7 @@
     "placed": 2,
     "total_items": 2,
     "solve_time_ms": 1,
-    "wall_time_ms": 1,
+    "wall_time_ms": 2,
     "error": null
   },
   {
@@ -1159,7 +1159,7 @@
     },
     "placed": 2,
     "total_items": 2,
-    "solve_time_ms": 0,
+    "solve_time_ms": 1,
     "wall_time_ms": 1,
     "error": null
   },
@@ -1197,8 +1197,8 @@
     },
     "placed": 2,
     "total_items": 2,
-    "solve_time_ms": 0,
-    "wall_time_ms": 1,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
     "error": null
   },
   {
@@ -1216,7 +1216,7 @@
       {
         "check": "max_time_ms",
         "expected": 1000,
-        "actual": 0,
+        "actual": 1,
         "pass": true
       }
     ],
@@ -1229,7 +1229,7 @@
     },
     "placed": 1,
     "total_items": 1,
-    "solve_time_ms": 0,
+    "solve_time_ms": 1,
     "wall_time_ms": 1,
     "error": null
   },
@@ -1248,7 +1248,7 @@
       {
         "check": "max_time_ms",
         "expected": 5000,
-        "actual": 200,
+        "actual": 214,
         "pass": true
       }
     ],
@@ -1261,8 +1261,8 @@
     },
     "placed": 20,
     "total_items": 20,
-    "solve_time_ms": 200,
-    "wall_time_ms": 201,
+    "solve_time_ms": 214,
+    "wall_time_ms": 214,
     "error": null
   },
   {
@@ -1280,21 +1280,21 @@
       {
         "check": "max_time_ms",
         "expected": 30000,
-        "actual": 2055,
+        "actual": 847,
         "pass": true
       }
     ],
-    "final_score": 0.5568,
+    "final_score": 0.5868,
     "metrics": {
       "volume_utilization": 0.1736,
       "item_coverage": 1.0,
       "fragility_score": 1.0,
-      "time_score": 0.7
+      "time_score": 1.0
     },
     "placed": 100,
     "total_items": 100,
-    "solve_time_ms": 2055,
-    "wall_time_ms": 2056,
+    "solve_time_ms": 847,
+    "wall_time_ms": 847,
     "error": null
   },
   {
@@ -1312,7 +1312,7 @@
       {
         "check": "max_time_ms",
         "expected": 30000,
-        "actual": 1633,
+        "actual": 1485,
         "pass": true
       }
     ],
@@ -1325,8 +1325,8 @@
     },
     "placed": 200,
     "total_items": 200,
-    "solve_time_ms": 1633,
-    "wall_time_ms": 1634,
+    "solve_time_ms": 1485,
+    "wall_time_ms": 1485,
     "error": null
   },
   {
@@ -1358,7 +1358,7 @@
     "placed": 4,
     "total_items": 4,
     "solve_time_ms": 3,
-    "wall_time_ms": 3,
+    "wall_time_ms": 4,
     "error": null
   },
   {
@@ -1421,8 +1421,8 @@
     },
     "placed": 0,
     "total_items": 1,
-    "solve_time_ms": 0,
-    "wall_time_ms": 1,
+    "solve_time_ms": 1,
+    "wall_time_ms": 2,
     "error": null
   },
   {
@@ -1518,7 +1518,7 @@
     "placed": 6,
     "total_items": 6,
     "solve_time_ms": 3,
-    "wall_time_ms": 3,
+    "wall_time_ms": 4,
     "error": null
   },
   {
@@ -1556,7 +1556,7 @@
     "placed": 6,
     "total_items": 6,
     "solve_time_ms": 8,
-    "wall_time_ms": 8,
+    "wall_time_ms": 9,
     "error": null
   },
   {
@@ -1594,7 +1594,7 @@
     "placed": 6,
     "total_items": 6,
     "solve_time_ms": 3,
-    "wall_time_ms": 3,
+    "wall_time_ms": 4,
     "error": null
   },
   {
@@ -1625,8 +1625,8 @@
     },
     "placed": 4,
     "total_items": 4,
-    "solve_time_ms": 7,
-    "wall_time_ms": 7,
+    "solve_time_ms": 9,
+    "wall_time_ms": 9,
     "error": null
   },
   {
@@ -1657,8 +1657,8 @@
     },
     "placed": 5,
     "total_items": 6,
-    "solve_time_ms": 7,
-    "wall_time_ms": 7,
+    "solve_time_ms": 8,
+    "wall_time_ms": 9,
     "error": null
   },
   {
@@ -1689,8 +1689,8 @@
     },
     "placed": 50,
     "total_items": 51,
-    "solve_time_ms": 475,
-    "wall_time_ms": 476,
+    "solve_time_ms": 484,
+    "wall_time_ms": 485,
     "error": null
   },
   {
@@ -1721,8 +1721,8 @@
     },
     "placed": 8,
     "total_items": 12,
-    "solve_time_ms": 47,
-    "wall_time_ms": 48,
+    "solve_time_ms": 51,
+    "wall_time_ms": 52,
     "error": null
   },
   {
@@ -1753,8 +1753,8 @@
     },
     "placed": 8,
     "total_items": 9,
-    "solve_time_ms": 67,
-    "wall_time_ms": 68,
+    "solve_time_ms": 73,
+    "wall_time_ms": 74,
     "error": null
   },
   {
@@ -1786,7 +1786,7 @@
     "placed": 6,
     "total_items": 6,
     "solve_time_ms": 4,
-    "wall_time_ms": 4,
+    "wall_time_ms": 5,
     "error": null
   },
   {
@@ -1817,8 +1817,8 @@
     },
     "placed": 12,
     "total_items": 12,
-    "solve_time_ms": 38,
-    "wall_time_ms": 39,
+    "solve_time_ms": 41,
+    "wall_time_ms": 41,
     "error": null
   },
   {
@@ -1849,8 +1849,8 @@
     },
     "placed": 14,
     "total_items": 14,
-    "solve_time_ms": 84,
-    "wall_time_ms": 84,
+    "solve_time_ms": 86,
+    "wall_time_ms": 87,
     "error": null
   },
   {
@@ -1913,8 +1913,8 @@
     },
     "placed": 66,
     "total_items": 66,
-    "solve_time_ms": 335,
-    "wall_time_ms": 336,
+    "solve_time_ms": 365,
+    "wall_time_ms": 366,
     "error": null
   },
   {
@@ -1945,8 +1945,8 @@
     },
     "placed": 20,
     "total_items": 20,
-    "solve_time_ms": 232,
-    "wall_time_ms": 233,
+    "solve_time_ms": 206,
+    "wall_time_ms": 206,
     "error": null
   },
   {
@@ -1983,8 +1983,8 @@
     },
     "placed": 12,
     "total_items": 12,
-    "solve_time_ms": 151,
-    "wall_time_ms": 152,
+    "solve_time_ms": 117,
+    "wall_time_ms": 118,
     "error": null
   },
   {
@@ -2021,8 +2021,8 @@
     },
     "placed": 18,
     "total_items": 18,
-    "solve_time_ms": 347,
-    "wall_time_ms": 348,
+    "solve_time_ms": 350,
+    "wall_time_ms": 351,
     "error": null
   },
   {
@@ -2059,8 +2059,8 @@
     },
     "placed": 9,
     "total_items": 9,
-    "solve_time_ms": 33,
-    "wall_time_ms": 34,
+    "solve_time_ms": 38,
+    "wall_time_ms": 38,
     "error": null
   },
   {
@@ -2097,8 +2097,8 @@
     },
     "placed": 18,
     "total_items": 18,
-    "solve_time_ms": 109,
-    "wall_time_ms": 110,
+    "solve_time_ms": 116,
+    "wall_time_ms": 116,
     "error": null
   },
   {
@@ -2129,8 +2129,8 @@
     },
     "placed": 12,
     "total_items": 12,
-    "solve_time_ms": 47,
-    "wall_time_ms": 48,
+    "solve_time_ms": 103,
+    "wall_time_ms": 104,
     "error": null
   },
   {
@@ -2161,8 +2161,8 @@
     },
     "placed": 26,
     "total_items": 26,
-    "solve_time_ms": 441,
-    "wall_time_ms": 442,
+    "solve_time_ms": 515,
+    "wall_time_ms": 515,
     "error": null
   },
   {
@@ -2193,8 +2193,8 @@
     },
     "placed": 33,
     "total_items": 36,
-    "solve_time_ms": 156,
-    "wall_time_ms": 157,
+    "solve_time_ms": 160,
+    "wall_time_ms": 161,
     "error": null
   },
   {
@@ -2231,8 +2231,8 @@
     },
     "placed": 18,
     "total_items": 18,
-    "solve_time_ms": 124,
-    "wall_time_ms": 125,
+    "solve_time_ms": 128,
+    "wall_time_ms": 128,
     "error": null
   },
   {
@@ -2263,8 +2263,8 @@
     },
     "placed": 18,
     "total_items": 18,
-    "solve_time_ms": 37,
-    "wall_time_ms": 38,
+    "solve_time_ms": 41,
+    "wall_time_ms": 42,
     "error": null
   },
   {
@@ -2295,8 +2295,8 @@
     },
     "placed": 5,
     "total_items": 8,
-    "solve_time_ms": 9,
-    "wall_time_ms": 10,
+    "solve_time_ms": 11,
+    "wall_time_ms": 12,
     "error": null
   },
   {
@@ -2327,8 +2327,8 @@
     },
     "placed": 12,
     "total_items": 13,
-    "solve_time_ms": 119,
-    "wall_time_ms": 119,
+    "solve_time_ms": 136,
+    "wall_time_ms": 136,
     "error": null
   },
   {
@@ -2359,8 +2359,8 @@
     },
     "placed": 73,
     "total_items": 73,
-    "solve_time_ms": 863,
-    "wall_time_ms": 863,
+    "solve_time_ms": 860,
+    "wall_time_ms": 860,
     "error": null
   },
   {
@@ -2391,8 +2391,8 @@
     },
     "placed": 18,
     "total_items": 24,
-    "solve_time_ms": 223,
-    "wall_time_ms": 224,
+    "solve_time_ms": 228,
+    "wall_time_ms": 229,
     "error": null
   },
   {
@@ -2423,8 +2423,8 @@
     },
     "placed": 8,
     "total_items": 15,
-    "solve_time_ms": 106,
-    "wall_time_ms": 106,
+    "solve_time_ms": 112,
+    "wall_time_ms": 113,
     "error": null
   },
   {
@@ -2461,8 +2461,8 @@
     },
     "placed": 55,
     "total_items": 65,
-    "solve_time_ms": 559,
-    "wall_time_ms": 560,
+    "solve_time_ms": 583,
+    "wall_time_ms": 584,
     "error": null
   },
   {
@@ -2499,8 +2499,8 @@
     },
     "placed": 22,
     "total_items": 22,
-    "solve_time_ms": 291,
-    "wall_time_ms": 292,
+    "solve_time_ms": 294,
+    "wall_time_ms": 295,
     "error": null
   },
   {
@@ -2531,8 +2531,8 @@
     },
     "placed": 16,
     "total_items": 18,
-    "solve_time_ms": 287,
-    "wall_time_ms": 287,
+    "solve_time_ms": 292,
+    "wall_time_ms": 293,
     "error": null
   },
   {
@@ -2569,8 +2569,8 @@
     },
     "placed": 24,
     "total_items": 24,
-    "solve_time_ms": 158,
-    "wall_time_ms": 158,
+    "solve_time_ms": 160,
+    "wall_time_ms": 161,
     "error": null
   },
   {
@@ -2607,8 +2607,8 @@
     },
     "placed": 72,
     "total_items": 81,
-    "solve_time_ms": 1444,
-    "wall_time_ms": 1445,
+    "solve_time_ms": 1423,
+    "wall_time_ms": 1424,
     "error": null
   }
 ]

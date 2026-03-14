@@ -172,6 +172,7 @@ def run_solver_for_request(
         beam_width=beam_width,
         model_dir=model_dir,
         strategy=strategy,
+        score_weights=score_weights,
     )
     response_dict = solution_to_dict(solution)
     evaluation = evaluate_with_score_weights(

@@ -96,6 +96,7 @@ def solve(
     beam_width: Optional[int] = None,
     model_dir: str = "models",
     strategy: str = "portfolio_block",
+    score_weights: Optional[Dict[str, float]] = None,
 ) -> Solution:
     """Solve using the configured runtime strategy.
 
@@ -131,6 +132,7 @@ def solve(
             request=request,
             model_dir=model_dir,
             time_budget_ms=time_budget_ms,
+            score_weights=score_weights,
         )
     elif strategy == "legacy_hybrid":
         response = solve_hybrid_request(
