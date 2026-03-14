@@ -325,14 +325,6 @@ def pack_greedy_ml(
                 ):
                     continue
 
-                # Hard block: check fragile constraint
-                h_score = score_placement(
-                    state, dx, dy, dz, ex, ey, ez,
-                    box.weight_kg, box.fragile,
-                )
-                if h_score < 0:
-                    continue
-
                 feats = extract_features(
                     state, dx, dy, dz, ex, ey, ez,
                     box.weight_kg, box.fragile, box.stackable,

@@ -203,6 +203,26 @@ def solve(
         except Exception as e:
             logger.warning("[solve] LNS failed: %s", e)
 
+    # Post-processing: compact-down + try-insert
+    if best_solution is not None and len(best_solution.placements) > 0:
+        try:
+            from .postprocess import postprocess_solution
+            pp_solution = postprocess_solution(task_id, pallet, boxes, best_solution)
+            pp_score = _evaluate_score(request_dict, pp_solution)
+            if pp_score is not None and pp_score > best_score:
+                logger.info(
+                    "[solve] postprocess improved: %.4f -> %.4f placed=%d->%d",
+                    best_score, pp_score,
+                    len(best_solution.placements), len(pp_solution.placements),
+                )
+                best_score = pp_score
+                best_solution = pp_solution
+                best_key = f"pp_{best_key}"
+            elif pp_score is not None:
+                logger.debug("[solve] postprocess no improvement: %.4f vs %.4f", pp_score, best_score)
+        except Exception as e:
+            logger.warning("[solve] postprocess failed: %s", e)
+
     # Update solve_time_ms to total time
     total_ms = int((time.perf_counter() - t0) * 1000)
     if best_solution is not None:
