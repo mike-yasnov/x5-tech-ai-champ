@@ -312,6 +312,43 @@ def generate_scenario(
             ]
         )
 
+    elif scenario_type == "count_preference":
+        pallet = {
+            "id": "TEST_600x400x200",
+            "length_mm": 600,
+            "width_mm": 400,
+            "max_height_mm": 200,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                {
+                    "sku_id": "SKU-LARGE-ONE",
+                    "description": "One large box occupying full pallet",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 10.0,
+                    "quantity": 1,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+                {
+                    "sku_id": "SKU-SMALL-TWO",
+                    "description": "Two smaller boxes with same total volume",
+                    "length_mm": 300,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 5.0,
+                    "quantity": 2,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+            ]
+        )
+
     else:
         raise ValueError(f"Unknown scenario_type: {scenario_type}")
 
@@ -340,6 +377,7 @@ if __name__ == "__main__":
         "fragile_mix",
         "support_tetris",
         "cavity_fill",
+        "count_preference",
     ]
     for sc in scenarios:
         task = generate_scenario(f"task_{sc}", sc, seed=123 + scenarios.index(sc))

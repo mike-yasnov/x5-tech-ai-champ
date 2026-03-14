@@ -25,6 +25,7 @@ SCENARIOS = [
     "fragile_mix",
     "support_tetris",
     "cavity_fill",
+    "count_preference",
 ]
 
 
@@ -233,3 +234,78 @@ def test_diagnostic_scenarios_separate_strategies(scenario_type, min_spread):
         scores.append(result["final_score"])
 
     assert max(scores) - min(scores) >= min_spread
+
+
+def test_count_preference_scoring_prefers_more_items_when_volume_is_equal():
+    """With equal fill, the benchmark score should prefer more placed items."""
+    request_dict = _make_request_dict("count_preference")
+
+    response_one_large = {
+        "task_id": request_dict["task_id"],
+        "solver_version": "test",
+        "solve_time_ms": 0,
+        "placements": [
+            {
+                "sku_id": "SKU-LARGE-ONE",
+                "instance_index": 0,
+                "position": {"x_mm": 0, "y_mm": 0, "z_mm": 0},
+                "dimensions_placed": {
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                },
+                "rotation_code": "LWH",
+            }
+        ],
+        "unplaced": [
+            {"sku_id": "SKU-SMALL-TWO", "quantity_unplaced": 2, "reason": "no_space"}
+        ],
+    }
+
+    response_two_small = {
+        "task_id": request_dict["task_id"],
+        "solver_version": "test",
+        "solve_time_ms": 0,
+        "placements": [
+            {
+                "sku_id": "SKU-SMALL-TWO",
+                "instance_index": 0,
+                "position": {"x_mm": 0, "y_mm": 0, "z_mm": 0},
+                "dimensions_placed": {
+                    "length_mm": 300,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                },
+                "rotation_code": "LWH",
+            },
+            {
+                "sku_id": "SKU-SMALL-TWO",
+                "instance_index": 1,
+                "position": {"x_mm": 300, "y_mm": 0, "z_mm": 0},
+                "dimensions_placed": {
+                    "length_mm": 300,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                },
+                "rotation_code": "LWH",
+            },
+        ],
+        "unplaced": [
+            {"sku_id": "SKU-LARGE-ONE", "quantity_unplaced": 1, "reason": "no_space"}
+        ],
+    }
+
+    result_one_large = evaluate_solution(request_dict, response_one_large)
+    result_two_small = evaluate_solution(request_dict, response_two_small)
+
+    assert result_one_large["valid"] is True
+    assert result_two_small["valid"] is True
+    assert result_one_large["metrics"]["volume_utilization"] == pytest.approx(1.0)
+    assert result_two_small["metrics"]["volume_utilization"] == pytest.approx(1.0)
+    assert result_one_large["metrics"]["item_coverage"] == pytest.approx(
+        1 / 3, rel=1e-3
+    )
+    assert result_two_small["metrics"]["item_coverage"] == pytest.approx(
+        2 / 3, rel=1e-3
+    )
+    assert result_two_small["final_score"] > result_one_large["final_score"]
