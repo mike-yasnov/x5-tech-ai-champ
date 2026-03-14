@@ -24,6 +24,7 @@ jobs:
 
     container:
       image: ${{ matrix.container-image }}
+      options: --user 1000:1000
 
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +41,7 @@ jobs:
     if: github.event_name == 'pull_request'
     container:
       image: python:3.12-bookworm
+      options: --user 1000:1000
     permissions:
       contents: read
       issues: write
