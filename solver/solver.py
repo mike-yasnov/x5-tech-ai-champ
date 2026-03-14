@@ -251,8 +251,12 @@ def solve(
     request_dict: dict,
     n_restarts: int = 30,
     time_budget_ms: int = 900,
+    model_dir: str = None,
+    strategy: str = "greedy",
 ) -> Solution:
     """Run greedy packer with multiple sort strategies and return the best solution."""
+    # Cap internal budget to stay under 1000ms (time_score=1.0 threshold)
+    time_budget_ms = min(time_budget_ms, 900)
     t0 = time.perf_counter()
     best_solution: Optional[Solution] = None
     best_score: float = -1.0
