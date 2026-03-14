@@ -85,7 +85,8 @@ def render_markdown(report: List[Dict[str, Any]], limit: int) -> str:
         lines.append("")
         lines.append("| Strategy | Score | Valid | Placed | Time (ms) |")
         lines.append("|----------|-------|-------|--------|-----------|")
-        for row in scenario["results"][:limit]:
+        rows = scenario["results"] if limit <= 0 else scenario["results"][:limit]
+        for row in rows:
             lines.append(
                 f"| {row['strategy']} | {row['final_score']:.4f} | {row['valid']} | {row['placed']} | {row['time_ms']} |"
             )
@@ -99,10 +100,13 @@ def main() -> None:
         "--scenario", choices=[name for name, _ in SCENARIOS] + ["all"], default="all"
     )
     parser.add_argument(
-        "--limit", type=int, default=10, help="How many top strategies to print"
+        "--limit", type=int, default=0, help="How many top strategies to print; 0 = all"
     )
     parser.add_argument(
         "--output", default=None, help="Optional path to save JSON report"
+    )
+    parser.add_argument(
+        "--markdown-output", default=None, help="Optional path to save markdown report"
     )
     args = parser.parse_args()
 
@@ -118,6 +122,10 @@ def main() -> None:
     if args.output:
         with open(args.output, "w", encoding="utf-8") as file:
             json.dump(report, file, indent=2, ensure_ascii=False)
+
+    if args.markdown_output:
+        with open(args.markdown_output, "w", encoding="utf-8") as file:
+            file.write(markdown)
 
 
 if __name__ == "__main__":
