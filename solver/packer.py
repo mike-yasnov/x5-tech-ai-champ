@@ -43,12 +43,47 @@ def _sort_constrained_first(box: Box) -> tuple:
     return (priority, -box.volume)
 
 
+def _sort_height_desc(box: Box) -> tuple:
+    return (-box.height_mm,)
+
+
+def _sort_weight_then_volume(box: Box) -> tuple:
+    return (-box.weight_kg, -box.volume)
+
+
+def _sort_fragile_last(box: Box) -> tuple:
+    # Non-fragile heavy first, fragile light last
+    return (1 if box.fragile else 0, -box.weight_kg, -box.volume)
+
+
+def _sort_perimeter_desc(box: Box) -> tuple:
+    # Larger perimeter = harder to fit later
+    return (-(box.length_mm + box.width_mm),)
+
+
+def _sort_volume_asc(box: Box) -> tuple:
+    return (box.volume,)
+
+
+def _sort_compact_first(box: Box) -> tuple:
+    # Prefer boxes closer to cubic (min dimension ratio)
+    dims = sorted([box.length_mm, box.width_mm, box.height_mm])
+    ratio = dims[0] / max(dims[2], 1)
+    return (-ratio, -box.volume)
+
+
 SORT_KEYS: Dict[str, Callable[[Box], tuple]] = {
     "volume_desc": _sort_volume_desc,
     "weight_desc": _sort_weight_desc,
     "base_area_desc": _sort_base_area_desc,
     "density_desc": _sort_density_desc,
     "constrained_first": _sort_constrained_first,
+    "height_desc": _sort_height_desc,
+    "weight_then_volume": _sort_weight_then_volume,
+    "fragile_last": _sort_fragile_last,
+    "perimeter_desc": _sort_perimeter_desc,
+    "volume_asc": _sort_volume_asc,
+    "compact_first": _sort_compact_first,
 }
 
 
