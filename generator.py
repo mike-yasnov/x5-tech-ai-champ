@@ -435,6 +435,55 @@ def generate_scenario(
             ]
         )
 
+    elif scenario_type == "non_stackable_caps":
+        pallet = {
+            "id": "TEST_1200x800x600",
+            "length_mm": 1200,
+            "width_mm": 800,
+            "max_height_mm": 600,
+            "max_weight_kg": 1000.0,
+        }
+        boxes.extend(
+            [
+                {
+                    "sku_id": "SKU-BASE-BLOCK",
+                    "description": "Stackable base block",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 12.0,
+                    "quantity": 4,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+                {
+                    "sku_id": "SKU-DISPLAY-CAP",
+                    "description": "Fragile do-not-stack display cap",
+                    "length_mm": 600,
+                    "width_mm": 400,
+                    "height_mm": 200,
+                    "weight_kg": 4.0,
+                    "quantity": 2,
+                    "strict_upright": True,
+                    "fragile": True,
+                    "stackable": False,
+                },
+                {
+                    "sku_id": "SKU-FILLER-200",
+                    "description": "Small filler carton",
+                    "length_mm": 300,
+                    "width_mm": 200,
+                    "height_mm": 200,
+                    "weight_kg": 1.5,
+                    "quantity": 12,
+                    "strict_upright": False,
+                    "fragile": False,
+                    "stackable": True,
+                },
+            ]
+        )
+
     else:
         raise ValueError(f"Unknown scenario_type: {scenario_type}")
 
@@ -468,6 +517,7 @@ if __name__ == "__main__":
         "fragile_cap_mix",
         "mixed_column_repeat",
         "small_gap_fill",
+        "non_stackable_caps",
     ]
     for sc in scenarios:
         task = generate_scenario(f"task_{sc}", sc, seed=123 + scenarios.index(sc))

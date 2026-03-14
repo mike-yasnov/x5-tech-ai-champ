@@ -5,22 +5,10 @@ import json
 from typing import Any, Dict, List
 
 from generator import generate_scenario
+from scenario_catalog import BENCHMARK_SCENARIOS
 from solver.models import Box, Pallet, solution_to_dict
 from solver.packer import SORT_KEYS, pack_greedy
 from validator import evaluate_solution
-
-
-SCENARIOS = [
-    ("heavy_water", 42),
-    ("fragile_tower", 43),
-    ("liquid_tetris", 44),
-    ("random_mixed", 45),
-    ("exact_fit", 46),
-    ("fragile_mix", 47),
-    ("support_tetris", 48),
-    ("cavity_fill", 49),
-    ("count_preference", 50),
-]
 
 
 def request_to_models(request_dict: dict):
@@ -97,7 +85,9 @@ def render_markdown(report: List[Dict[str, Any]], limit: int) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare baseline sort heuristics")
     parser.add_argument(
-        "--scenario", choices=[name for name, _ in SCENARIOS] + ["all"], default="all"
+        "--scenario",
+        choices=[name for name, _ in BENCHMARK_SCENARIOS] + ["all"],
+        default="all",
     )
     parser.add_argument(
         "--limit", type=int, default=0, help="How many top strategies to print; 0 = all"
@@ -111,9 +101,9 @@ def main() -> None:
     args = parser.parse_args()
 
     selected = (
-        SCENARIOS
+        BENCHMARK_SCENARIOS
         if args.scenario == "all"
-        else [item for item in SCENARIOS if item[0] == args.scenario]
+        else [item for item in BENCHMARK_SCENARIOS if item[0] == args.scenario]
     )
     report = [benchmark_scenario(name, seed) for name, seed in selected]
     markdown = render_markdown(report, args.limit)
