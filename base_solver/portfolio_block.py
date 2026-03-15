@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
+from validator import evaluate_solution
 
 from .block_features import BlockFeatureExtractor, BlockFeatureView
 from .block_ranker import BlockRanker, normalize_scores
@@ -229,6 +230,11 @@ def solve_request(
     weight_tight = _is_weight_tight_fingerprint(fingerprint)
     low_ceiling = _is_low_ceiling_pressure(fingerprint)
     fragile_dominant = _is_fragile_dominant_fingerprint(fingerprint)
+    upright_dense_path = (
+        fingerprint.upright_ratio >= 0.95
+        and fingerprint.sku_count <= 4
+        and fingerprint.volume_ratio <= 0.65
+    )
     prefer_safe_fragility = _should_use_conservative_fragility_selection(fingerprint)
     strict_safe_selection = (
         fingerprint.volume_ratio <= 1.10
@@ -247,6 +253,9 @@ def solve_request(
     if fast_overload_path:
         seed_limit_ms = min(seed_limit_ms, 170)
         order_budget_ms = min(order_budget_ms, 110)
+        repair_budget_ms = 0
+    if upright_dense_path:
+        order_budget_ms = min(order_budget_ms, 40)
         repair_budget_ms = 0
 
     ranked_families = _rank_seed_families(fingerprint, selector)
@@ -341,6 +350,8 @@ def solve_request(
             and (weight_tight or fragile_dominant)
         )
     )
+    if upright_dense_path:
+        enable_local_order = False
     best_greedy = _best_greedy_run(runs)
     if best_greedy is not None and enable_local_order:
         elapsed_so_far = int((time.perf_counter() - t0) * 1000)
@@ -384,6 +395,8 @@ def solve_request(
         and not repeat_heavy
         and not fast_overload_path
     )
+    if upright_dense_path:
+        enable_repair = False
     best_two = sorted(
         _safe_fragility_pool(runs) if strict_safe_selection else runs,
         key=lambda candidate: _top_level_run_sort_key(
@@ -425,14 +438,46 @@ def solve_request(
             if _run_sort_key(repaired) > _run_sort_key(candidate):
                 runs.append(repaired)
 
-    best = max(
-        _safe_fragility_pool(runs) if strict_safe_selection else runs,
+    candidate_pool = _safe_fragility_pool(runs) if strict_safe_selection else runs
+    ranked_runs = sorted(
+        candidate_pool,
         key=lambda candidate: _top_level_run_sort_key(
             candidate,
             request,
             prefer_safe_fragility=prefer_safe_fragility,
         ),
+        reverse=True,
     )
+    shortlist_size = 4
+    if fast_overload_path or fingerprint.total_items >= 120:
+        shortlist_size = 2
+    elif fingerprint.total_items >= 80:
+        shortlist_size = 3
+
+    raw_shortlist: List[Tuple[Tuple[float, float, float, float], PolicyRun]] = []
+    shortlist_preview_ms = int((time.perf_counter() - t0) * 1000)
+    for candidate in ranked_runs[:shortlist_size]:
+        raw_preview = _preview_validator_score(
+            request=request,
+            placements=candidate.placements,
+            solve_time_ms=max(shortlist_preview_ms, candidate.elapsed_ms),
+        )
+        raw_shortlist.append((raw_preview, candidate))
+    raw_shortlist.sort(key=lambda item: (item[0][0], -item[1].elapsed_ms), reverse=True)
+
+    finalize_limit = 2
+    if fingerprint.total_items <= 40 and not fast_overload_path:
+        finalize_limit = 3
+    if (
+        fingerprint.upright_ratio >= 0.95
+        and fingerprint.volume_ratio <= 0.55
+        and fingerprint.total_items >= 60
+    ):
+        finalize_limit = 1
+
+    best = raw_shortlist[0][1]
+    shortlist_start_ms = int((time.perf_counter() - t0) * 1000)
+    best_finalize_start_ms = shortlist_start_ms
     placements, leftover, final_state = _finalize_run(
         request=request,
         run=best,
@@ -440,14 +485,59 @@ def solve_request(
         candidate_gen=candidate_gen,
     )
 
-    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    best_elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    best_finalize_ms = max(0, best_elapsed_ms - best_finalize_start_ms)
+    best_projected_ms = shortlist_start_ms + best_finalize_ms
+    best_preview = _preview_validator_score(
+        request=request,
+        placements=placements,
+        solve_time_ms=best_projected_ms,
+    )
+
+    for _, candidate in raw_shortlist[1:finalize_limit]:
+        current_elapsed = int((time.perf_counter() - t0) * 1000)
+        budget_left = max(0, time_budget_ms - current_elapsed)
+        if budget_left <= 25:
+            break
+
+        candidate_finalize_start_ms = current_elapsed
+        candidate_placements, candidate_leftover, candidate_state = _finalize_run(
+            request=request,
+            run=candidate,
+            checker=checker,
+            candidate_gen=candidate_gen,
+        )
+        candidate_elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        candidate_finalize_ms = max(0, candidate_elapsed_ms - candidate_finalize_start_ms)
+        candidate_projected_ms = shortlist_start_ms + candidate_finalize_ms
+        candidate_preview = _preview_validator_score(
+            request=request,
+            placements=candidate_placements,
+            solve_time_ms=candidate_projected_ms,
+        )
+
+        if (
+            candidate_preview[0] > best_preview[0] + 1e-6
+            or (
+                abs(candidate_preview[0] - best_preview[0]) <= 1e-6
+                and candidate_projected_ms < best_projected_ms
+            )
+        ):
+            best = candidate
+            placements = candidate_placements
+            leftover = candidate_leftover
+            final_state = candidate_state
+            best_elapsed_ms = candidate_elapsed_ms
+            best_projected_ms = candidate_projected_ms
+            best_preview = candidate_preview
+
     return _format_output(
         request["task_id"],
         placements,
         leftover,
         request["boxes"],
         final_state,
-        elapsed_ms,
+        best_elapsed_ms,
     )
 
 
@@ -921,6 +1011,21 @@ def _run_greedy_seed_family(
             )
             if aggressive_instances and aggressive_instances != staged_variants[0][1]:
                 staged_variants.append(("staged3", aggressive_instances))
+            light_caps_instances = _fragile_staged_instances(
+                boxes,
+                pallet,
+                anchor_count=1,
+                target_area_ratio=0.84,
+                sturdy_before_heavy_tail=True,
+            )
+            if (
+                light_caps_instances
+                and all(
+                    light_caps_instances != existing
+                    for _, existing in staged_variants
+                )
+            ):
+                staged_variants.append(("light_caps", light_caps_instances))
 
         for suffix, staged_instances in staged_variants:
             if not staged_instances:
@@ -961,8 +1066,40 @@ def _run_greedy_seed_family(
                 )
             )
         if _should_try_upright_prefill_staging(fingerprint):
-            prefill_instances = _upright_prefill_instances(boxes)
-            if prefill_instances:
+            prefill_variants = [
+                ("upright_prefill", _upright_prefill_instances(boxes), strict_fragility),
+                (
+                    "upright_prefill_deep",
+                    _upright_prefill_instances(
+                        boxes,
+                        filler_ratio=0.9,
+                        delicate_ratio=2.0 / 3.0,
+                    ),
+                    strict_fragility,
+                ),
+            ]
+            if not strict_fragility and fingerprint.fragile_ratio >= 0.20:
+                prefill_variants.extend(
+                    [
+                        (
+                            "upright_prefill_safe",
+                            _upright_prefill_instances(boxes),
+                            True,
+                        ),
+                        (
+                            "upright_prefill_deep_safe",
+                            _upright_prefill_instances(
+                                boxes,
+                                filler_ratio=0.9,
+                                delicate_ratio=2.0 / 3.0,
+                            ),
+                            True,
+                        ),
+                    ]
+                )
+            for suffix, prefill_instances, variant_strict_fragility in prefill_variants:
+                if not prefill_instances:
+                    continue
                 candidates.append(
                     _policy_run_from_solution(
                         request=request,
@@ -970,16 +1107,19 @@ def _run_greedy_seed_family(
                             task_id,
                             pallet,
                             prefill_instances,
-                            label=f"{label}:upright_prefill",
-                            strict_fragility=strict_fragility,
+                            label=f"{label}:{suffix}",
+                            strict_fragility=variant_strict_fragility,
                         ),
                         total_items=total_items,
-                        name=f"{run_name}:upright_prefill",
+                        name=f"{run_name}:{suffix}",
                         seed_family=seed_family,
                         ordered_skus=(),
                     )
                 )
-    run = _select_best_run(candidates)
+    if len(candidates) > 1:
+        run = _select_best_seed_candidate(request, candidates)
+    else:
+        run = candidates[0]
     if apply_postprocess:
         post_budget_ms = max(0, budget_ms - int((time.perf_counter() - t0) * 1000))
         run = _maybe_postprocess_run(
@@ -1033,6 +1173,7 @@ def _fragile_staged_instances(
     pallet: Pallet,
     anchor_count: int = 2,
     target_area_ratio: float = 0.90,
+    sturdy_before_heavy_tail: bool = False,
 ) -> List[Tuple[Box, int]]:
     sturdy = sorted(
         [box for box in boxes if not box.fragile],
@@ -1067,7 +1208,13 @@ def _fragile_staged_instances(
             instances.append((box, next_index[box.sku_id]))
             next_index[box.sku_id] += 1
 
-    for group in (fragile_light, fragile_heavy, sturdy):
+    tail_groups: Tuple[Sequence[Box], ...]
+    if sturdy_before_heavy_tail:
+        tail_groups = (fragile_light, sturdy, fragile_heavy)
+    else:
+        tail_groups = (fragile_light, fragile_heavy, sturdy)
+
+    for group in tail_groups:
         for box in group:
             while next_index[box.sku_id] < box.quantity:
                 instances.append((box, next_index[box.sku_id]))
@@ -1101,6 +1248,34 @@ def _should_try_aggressive_fragile_staging(
     )
 
 
+def _select_best_seed_candidate(
+    request: Dict[str, Any],
+    runs: Sequence[PolicyRun],
+) -> PolicyRun:
+    best = runs[0]
+    best_preview = _preview_validator_score(
+        request,
+        best.placements,
+        max(best.elapsed_ms, 1),
+    )
+    for run in runs[1:]:
+        preview = _preview_validator_score(
+            request,
+            run.placements,
+            max(run.elapsed_ms, 1),
+        )
+        if (
+            preview[0] > best_preview[0] + 1e-6
+            or (
+                abs(preview[0] - best_preview[0]) <= 1e-6
+                and run.elapsed_ms < best.elapsed_ms
+            )
+        ):
+            best = run
+            best_preview = preview
+    return best
+
+
 def _should_try_upright_prefill_staging(
     fingerprint: ScenarioFingerprint,
 ) -> bool:
@@ -1109,7 +1284,10 @@ def _should_try_upright_prefill_staging(
         and fingerprint.sku_count <= 4
         and fingerprint.upright_ratio >= 0.95
         and fingerprint.volume_ratio <= 0.55
-        and fingerprint.non_stackable_ratio >= 0.15
+        and (
+            fingerprint.non_stackable_ratio >= 0.15
+            or fingerprint.fragile_ratio >= 0.20
+        )
         and fingerprint.fragile_ratio <= 0.45
     )
 
@@ -1121,8 +1299,11 @@ def _should_try_upright_layered_candidate(
         fingerprint.total_items <= 120
         and fingerprint.sku_count <= 4
         and fingerprint.upright_ratio >= 0.95
-        and fingerprint.non_stackable_ratio >= 0.15
         and fingerprint.volume_ratio <= 0.65
+        and (
+            fingerprint.non_stackable_ratio >= 0.10
+            or fingerprint.fragile_ratio >= 0.20
+        )
     )
 
 
@@ -1139,6 +1320,8 @@ def _should_try_small_column_candidate(
 
 def _upright_prefill_instances(
     boxes: Sequence[Box],
+    filler_ratio: float = 0.8,
+    delicate_ratio: float = 1.0 / 3.0,
 ) -> List[Tuple[Box, int]]:
     sturdy = sorted(
         [box for box in boxes if not box.fragile and box.stackable],
@@ -1172,9 +1355,9 @@ def _upright_prefill_instances(
 
     take(primary, primary.quantity)
     for box in fillers:
-        take(box, max(4, int(round(box.quantity * 0.8))))
+        take(box, max(4, int(round(box.quantity * filler_ratio))))
     for box in delicate:
-        take(box, max(4, int(round(box.quantity / 3))))
+        take(box, max(4, int(round(box.quantity * delicate_ratio))))
     for box in fillers:
         take(box, box.quantity)
     for box in delicate:
@@ -1833,19 +2016,69 @@ def _fragility_offender_signatures(
     return offenders
 
 
+def _direct_support_graph(
+    placements: Sequence[PlacedBox],
+) -> Dict[int, List[int]]:
+    graph: Dict[int, List[int]] = {idx: [] for idx in range(len(placements))}
+    for lower_idx, lower in enumerate(placements):
+        for upper_idx, upper in enumerate(placements):
+            if lower_idx == upper_idx:
+                continue
+            if abs(lower.aabb.z_max - upper.aabb.z_min) >= EPSILON:
+                continue
+            if lower.aabb.overlap_area_xy(upper.aabb) <= 0:
+                continue
+            graph[lower_idx].append(upper_idx)
+    return graph
+
+
+def _fragility_overload_details(
+    placements: Sequence[PlacedBox],
+) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, List[int]]]:
+    graph = _direct_support_graph(placements)
+    overloaded: Dict[int, Dict[str, Any]] = {}
+
+    for start_idx, box in enumerate(placements):
+        if not box.fragile:
+            continue
+        supporters = []
+        stack = [start_idx]
+        seen = {start_idx}
+
+        while stack:
+            current_idx = stack.pop()
+            for upper_idx in graph.get(current_idx, []):
+                upper = placements[upper_idx]
+                if upper.fragile:
+                    if upper_idx not in seen:
+                        seen.add(upper_idx)
+                        stack.append(upper_idx)
+                    continue
+                if upper.weight <= FRAGILE_WEIGHT_THRESHOLD:
+                    continue
+                supporters.append(upper_idx)
+
+        supporters = sorted(set(supporters))
+        if supporters:
+            overloaded[start_idx] = {
+                "load": sum(placements[idx].weight for idx in supporters),
+                "reachable": set(supporters),
+                "supporters": tuple(supporters),
+            }
+
+    return overloaded, graph
+
+
 def _fragility_conflicts(
     placements: Sequence[PlacedBox],
 ) -> List[FragilityConflict]:
     conflicts: List[FragilityConflict] = []
-    for top in placements:
-        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
-            continue
-        if top.fragile:
-            continue
-        for bottom in placements:
-            if not bottom.fragile:
-                continue
-            if abs(top.aabb.z_min - bottom.aabb.z_max) >= EPSILON:
+    overloaded, graph = _fragility_overload_details(placements)
+    for bottom_idx in overloaded:
+        bottom = placements[bottom_idx]
+        for top_idx in overloaded[bottom_idx]["supporters"]:
+            top = placements[top_idx]
+            if top.weight <= FRAGILE_WEIGHT_THRESHOLD or top.fragile:
                 continue
             overlap_area = top.aabb.overlap_area_xy(bottom.aabb)
             if overlap_area <= 0:
@@ -2053,6 +2286,8 @@ def _finalize_run(
     placements = _reindex_placements(run.placements)
     leftover = _clone_remaining(run.remaining)
     final_state, _ = _rebuild_state(request, placements)
+    if "+postprocess" in run.name:
+        return placements, leftover, final_state
     post_placements, post_leftover = postprocess(
         _reindex_placements(placements),
         _clone_remaining(leftover),
@@ -2747,18 +2982,7 @@ def _top_level_run_sort_key(
 def _fragility_score_from_placements(
     placements: Sequence[PlacedBox],
 ) -> float:
-    violations = 0
-    for top in placements:
-        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
-            continue
-        if top.fragile:
-            continue
-        for bottom in placements:
-            if not bottom.fragile:
-                continue
-            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON:
-                if top.aabb.overlap_area_xy(bottom.aabb) > 0:
-                    violations += 1
+    violations = len(_fragility_conflicts(placements))
     return max(0.0, 1.0 - 0.05 * violations)
 
 
@@ -2818,19 +3042,7 @@ def _solution_proxy(state: PalletState, total_items: int) -> float:
     placements = state.placed
     vol_util = state.placed_volume / max(state.pallet_volume, 1)
     coverage = len(placements) / max(total_items, 1)
-    fragility_violations = 0
-    for top in placements:
-        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
-            continue
-        if top.fragile:
-            continue
-        for bottom in placements:
-            if not bottom.fragile:
-                continue
-            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON:
-                if top.aabb.overlap_area_xy(bottom.aabb) > 0:
-                    fragility_violations += 1
-    fragility_score = max(0.0, 1.0 - 0.05 * fragility_violations)
+    fragility_score = _fragility_score_from_placements(placements)
     w_vol, w_cov, w_frag = _proxy_weights_no_time(_active_score_weights)
     return w_vol * vol_util + w_cov * coverage + w_frag * fragility_score
 
@@ -2988,6 +3200,47 @@ def _format_output(
         "placements": placed_list,
         "unplaced": unplaced_list,
     }
+
+
+def _preview_validator_score(
+    request: Dict[str, Any],
+    placements: Sequence[PlacedBox],
+    solve_time_ms: int,
+) -> Tuple[float, float, float, float]:
+    response = {
+        "task_id": request["task_id"],
+        "solver_version": SOLVER_VERSION,
+        "solve_time_ms": solve_time_ms,
+        "placements": [
+            {
+                "sku_id": placement.sku_id,
+                "instance_index": placement.instance_index,
+                "position": {
+                    "x_mm": placement.aabb.x_min,
+                    "y_mm": placement.aabb.y_min,
+                    "z_mm": placement.aabb.z_min,
+                },
+                "dimensions_placed": {
+                    "length_mm": placement.placed_dims[0],
+                    "width_mm": placement.placed_dims[1],
+                    "height_mm": placement.placed_dims[2],
+                },
+                "rotation_code": placement.rotation_code,
+            }
+            for placement in _reindex_placements(placements)
+        ],
+        "unplaced": [],
+    }
+    evaluated = evaluate_solution(request, response)
+    if not evaluated.get("valid", False):
+        return (-1.0, 0.0, 0.0, 0.0)
+    metrics = evaluated["metrics"]
+    return (
+        evaluated["final_score"],
+        metrics["fragility_score"],
+        metrics["volume_utilization"],
+        metrics["item_coverage"],
+    )
 
 
 def _classify_unplaced_reason(
