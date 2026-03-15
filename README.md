@@ -36,8 +36,6 @@
 - `models/` - обученные selector/ranker модели
 - `docs/` - описание решения, hard scenarios и заметки по разработке
 
-После реорганизации корень репозитория оставлен только для основных пакетов и конфигурации; служебные AI-артефакты вроде `.claude/` из репозитория удалены.
-
 Основные module entrypoints:
 
 - `python -m scripts.benchmark` - основной benchmark для сравнения `base_solver` и `alternative_solver`
