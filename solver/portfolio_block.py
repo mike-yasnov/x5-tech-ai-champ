@@ -2032,11 +2032,24 @@ def _fragility_overload_details(
     for start_idx, box in enumerate(placements):
         if not box.fragile:
             continue
-        supporters = [
-            idx
-            for idx in graph.get(start_idx, [])
-            if placements[idx].weight > FRAGILE_WEIGHT_THRESHOLD
-        ]
+        supporters = []
+        stack = [start_idx]
+        seen = {start_idx}
+
+        while stack:
+            current_idx = stack.pop()
+            for upper_idx in graph.get(current_idx, []):
+                upper = placements[upper_idx]
+                if upper.fragile:
+                    if upper_idx not in seen:
+                        seen.add(upper_idx)
+                        stack.append(upper_idx)
+                    continue
+                if upper.weight <= FRAGILE_WEIGHT_THRESHOLD:
+                    continue
+                supporters.append(upper_idx)
+
+        supporters = sorted(set(supporters))
         if supporters:
             overloaded[start_idx] = {
                 "load": sum(placements[idx].weight for idx in supporters),
@@ -2054,9 +2067,9 @@ def _fragility_conflicts(
     overloaded, graph = _fragility_overload_details(placements)
     for bottom_idx in overloaded:
         bottom = placements[bottom_idx]
-        for top_idx in graph.get(bottom_idx, []):
+        for top_idx in overloaded[bottom_idx]["supporters"]:
             top = placements[top_idx]
-            if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+            if top.weight <= FRAGILE_WEIGHT_THRESHOLD or top.fragile:
                 continue
             overlap_area = top.aabb.overlap_area_xy(bottom.aabb)
             if overlap_area <= 0:
@@ -2754,7 +2767,7 @@ def _heavy_on_fragile(
     fragile: bool,
     state: PalletState,
 ) -> bool:
-    if weight <= FRAGILE_WEIGHT_THRESHOLD or aabb.z_min == 0:
+    if weight <= FRAGILE_WEIGHT_THRESHOLD or fragile or aabb.z_min == 0:
         return False
     for placed in state.placed:
         if not placed.fragile:

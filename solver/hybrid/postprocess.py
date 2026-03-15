@@ -31,7 +31,11 @@ def _supported_safely(
             continue
         if not other.stackable:
             return False
-        if candidate.weight > FRAGILE_WEIGHT_THRESHOLD and other.fragile:
+        if (
+            candidate.weight > FRAGILE_WEIGHT_THRESHOLD
+            and not candidate.fragile
+            and other.fragile
+        ):
             return False
         support += overlap
     return support / base_area >= 0.6 - EPSILON
@@ -179,16 +183,39 @@ def _direct_support_graph(placements: List[PlacedBox]) -> dict[int, list[int]]:
     return graph
 
 
+def _non_fragile_heavy_supporters(
+    placements: List[PlacedBox],
+    graph: dict[int, list[int]],
+    start_idx: int,
+) -> set[int]:
+    supporters: set[int] = set()
+    stack = [start_idx]
+    seen = {start_idx}
+
+    while stack:
+        current_idx = stack.pop()
+        for upper_idx in graph.get(current_idx, []):
+            upper = placements[upper_idx]
+            if upper.fragile:
+                if upper_idx not in seen:
+                    seen.add(upper_idx)
+                    stack.append(upper_idx)
+                continue
+            if upper.weight <= FRAGILE_WEIGHT_THRESHOLD:
+                continue
+            supporters.add(upper_idx)
+
+    return supporters
+
+
 def _count_fragility_violations(placements: List[PlacedBox]) -> int:
+    graph = _direct_support_graph(placements)
     count = 0
-    for bottom in placements:
+    for bottom_idx, bottom in enumerate(placements):
         if not bottom.fragile:
             continue
-        for top in placements:
-            if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
-                continue
-            if abs(top.aabb.z_min - bottom.aabb.z_max) >= EPSILON:
-                continue
+        for top_idx in _non_fragile_heavy_supporters(placements, graph, bottom_idx):
+            top = placements[top_idx]
             if top.aabb.overlap_area_xy(bottom.aabb) > 0:
                 count += 1
     return count
