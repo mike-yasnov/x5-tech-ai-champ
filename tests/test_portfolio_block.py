@@ -181,11 +181,13 @@ def test_heavy_fragile_is_not_blocked_on_fragile_support():
 
 
 def test_default_solve_dispatches_to_portfolio(monkeypatch):
-    from solver import solver as solver_module
+    import base_solver.solver as solver_module
 
     called = {"portfolio": False, "hybrid": False}
 
-    def fake_portfolio_request(request, model_dir="models", time_budget_ms=900, score_weights=None):
+    def fake_portfolio_request(
+        request, model_dir="models", time_budget_ms=900, score_weights=None
+    ):
         called["portfolio"] = True
         return {
             "task_id": request["task_id"],
@@ -199,7 +201,9 @@ def test_default_solve_dispatches_to_portfolio(monkeypatch):
         called["hybrid"] = True
         raise AssertionError("legacy_hybrid should not be called by default")
 
-    monkeypatch.setattr(solver_module, "solve_portfolio_request", fake_portfolio_request)
+    monkeypatch.setattr(
+        solver_module, "solve_portfolio_request", fake_portfolio_request
+    )
     monkeypatch.setattr(solver_module, "solve_hybrid_request", fake_hybrid_request)
 
     pallet = Pallet("EUR", 1200, 800, 1800, 1000.0)
@@ -245,7 +249,9 @@ def test_upright_prefill_gate_targets_low_volume_upright_nonstackable_mix():
         generate_scenario("test_liquid_tetris", "liquid_tetris", seed=44)
     )
     upright_tight = compute_request_fingerprint(
-        generate_scenario("test_all_upright_tight", "private_all_upright_tight", seed=211)
+        generate_scenario(
+            "test_all_upright_tight", "private_all_upright_tight", seed=211
+        )
     )
 
     assert _should_try_upright_prefill_staging(liquid) is True
@@ -508,7 +514,9 @@ def test_strict_fragility_search_gates_on_near_fit_heavy_fragile_requests():
         seed_family="fragile_density",
         ordered_skus=tuple(box["sku_id"] for box in tower_request["boxes"]),
     )
-    assert _should_try_strict_fragility_search(tower_request, tower_fp, tower_run) is False
+    assert (
+        _should_try_strict_fragility_search(tower_request, tower_fp, tower_run) is False
+    )
 
 
 def test_fast_overload_path_targets_large_overloaded_high_sku_requests():

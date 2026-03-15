@@ -47,7 +47,7 @@ jobs:
           ./.venv/bin/pip install -r requirements.txt
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Run unit tests
+      - name: Run unit tests for both solvers
         run: pytest tests/ -v --tb=short
 
   benchmark:

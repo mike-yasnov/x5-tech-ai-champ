@@ -27,19 +27,23 @@
 
 ### Структура проекта
 
-```
-├── base_solver/          # Солвер 1: Portfolio-Block Hybrid
-├── alternative_solver/   # Солвер 2: Multi-restart EP + LNS
-├── benchmark.py          # Unified benchmark (сравнение обоих солверов)
-├── webapp.py             # Web UI (NiceGUI + FastAPI)
-├── experiment_service.py # Сервис экспериментов для web UI
-├── generator.py          # Генератор тестовых сценариев
-├── validator.py          # Валидатор решений (исправленный)
-├── validator_org.py      # Оригинальный валидатор организаторов
-├── visualize.py          # 3D визуализация (HTML)
-├── scenario_catalog.py   # Каталог benchmark-сценариев
-└── tests/                # Тесты
-```
+- `base_solver/` - базовый production solver: Portfolio-Block Hybrid, CLI и runtime-стратегии
+- `alternative_solver/` - альтернативный solver: multi-restart EP + LNS, свои greedy/beam/layer режимы
+- `tests/` - unit и integration tests; `tests/test_solver.py` прогоняет общие сценарии для обоих solvers
+- `tools/` - benchmark/reporting utilities, вынесенные из корня (`benchmark_methods`, `compare_benchmarks`, `benchmark_utils`)
+- `models/` - обученные selector/ranker модели
+- `docs/` - описание решения, hard scenarios и заметки по разработке
+
+Ключевые entrypoints в корне:
+
+- `benchmark.py` - основной benchmark для сравнения `base_solver` и `alternative_solver`
+- `benchmark_strategies.py` - сравнение стратегий внутри solver-пайплайна
+- `generator.py` - генератор request-сценариев
+- `validator.py` - рабочий валидатор решений
+- `validator_org.py` - оригинальная версия валидатора организаторов
+- `visualize.py` - генерация 3D HTML-визуализаций
+- `webapp.py` - web UI на NiceGUI/FastAPI
+- `experiment_service.py` - backend-слой для web UI и сценариев экспериментов
 
 ## Быстрый старт
 
@@ -60,15 +64,18 @@ python -m base_solver request_heavy_water.json -o response.json
 # Решить один request (alternative_solver)
 python -m alternative_solver request_heavy_water.json -o response.json
 
-# Прогнать тесты
+# Прогнать тесты для обоих solvers
 pytest tests/ -v
 
 # Основной benchmark (оба солвера)
 python benchmark.py
 
-# Benchmark только одного солвера
+# Benchmark только одного solver
 python benchmark.py --solver base
 python benchmark.py --solver alternative
+
+# Сравнение solver-методов и greedy-стратегий
+python -m tools.benchmark_methods --methods solver:base solver:alternative
 
 # Веб-лаборатория
 python webapp.py
@@ -105,6 +112,9 @@ python -m base_solver request_random_mixed.json --time-budget 5000
 
 # Alternative solver
 python -m alternative_solver request_heavy_water.json -o result.json --time-budget 5000
+
+# Отдельный benchmark-report по методам
+python -m tools.benchmark_methods --scenario-set smoke --limit 10
 ```
 
 ## Солверы
@@ -159,6 +169,12 @@ python benchmark.py --restarts 30
 ```
 
 Benchmark прогоняет 9 сценариев (4 organizer + 5 diagnostic) и выводит сравнительную таблицу с метриками: volume utilization, item coverage, fragility score, time score.
+
+Для сравнения benchmark-отчетов между ветками:
+
+```bash
+python -m tools.compare_benchmarks --baseline baseline.json --candidate candidate.json
+```
 
 ## Архитектура решения
 
