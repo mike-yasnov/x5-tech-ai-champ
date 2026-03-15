@@ -61,6 +61,9 @@ def score_placement(
     contact_score = min(1.0, contact / surface_area) if surface_area > 0 else 0.0
 
     # 3. Fragility: penalty for placing heavy box on fragile ones
+    # Note: fragile-on-fragile is technically allowed per task spec,
+    # but we still apply soft penalty as a packing quality heuristic
+    # (prefer heavy items lower, fragile on top)
     fragility_component = 1.0
     if weight_kg > 2.0 and z > 0:
         fragile_below = state.get_fragile_boxes_at_top(z, x, y, x2, y2)

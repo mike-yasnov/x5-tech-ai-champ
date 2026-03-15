@@ -384,15 +384,15 @@ def _find_fragility_violations(
     placements: List[Placement],
     boxes_meta: Dict[str, Box],
 ) -> List[Tuple[int, int]]:
-    """Find pairs (heavy_idx, fragile_idx) where heavy box rests on fragile box.
+    """Find pairs (heavy_idx, fragile_idx) where non-fragile heavy box rests on fragile box.
 
-    A violation occurs when a box with weight > 2kg is placed directly on top
-    of a fragile box (z_min of heavy == z_max of fragile, with XY overlap).
+    Per task spec: fragile=true means "нельзя ставить под не-хрупкий груз тяжелее 2 кг".
+    Fragile-on-fragile is NOT a violation.
     """
     violations = []
     for i, p_heavy in enumerate(placements):
         box_heavy = boxes_meta[p_heavy.sku_id]
-        if box_heavy.weight_kg <= 2.0 or p_heavy.z_mm == 0:
+        if box_heavy.weight_kg <= 2.0 or box_heavy.fragile or p_heavy.z_mm == 0:
             continue
 
         hx1, hy1 = p_heavy.x_mm, p_heavy.y_mm

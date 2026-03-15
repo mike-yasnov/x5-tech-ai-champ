@@ -46,7 +46,7 @@ def _fast_score(pallet: Pallet, boxes: List[Box], solution: Solution) -> float:
     fragility_violations = 0
     for top in placements:
         top_box = boxes_meta[top.sku_id]
-        if top_box.weight_kg <= 2.0 or top.z_mm == 0:
+        if top_box.weight_kg <= 2.0 or top_box.fragile or top.z_mm == 0:
             continue
         tx1, ty1 = top.x_mm, top.y_mm
         tx2, ty2 = tx1 + top.length_mm, ty1 + top.width_mm
