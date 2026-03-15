@@ -23,8 +23,8 @@ def main():
         help="Output JSON file (only for single input; for batch, uses response_<name>.json)",
     )
     parser.add_argument(
-        "--restarts", type=int, default=10,
-        help="Number of restarts (default: 10)",
+        "--restarts", type=int, default=30,
+        help="Number of restarts (default: 30)",
     )
     parser.add_argument(
         "--time-budget", type=int, default=900,

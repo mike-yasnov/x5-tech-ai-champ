@@ -1,0 +1,10 @@
+{
+  "a2c": {
+    "agent": "a2c",
+    "episodes": 200,
+    "final_avg_reward": 0.36691853081218884,
+    "final_avg_placed": 9.35,
+    "best_avg_reward": 0.44896391559829063,
+    "wall_time_sec": 26.5
+  }
+}

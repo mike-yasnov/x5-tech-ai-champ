@@ -179,10 +179,14 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
     item_coverage = placed_items / total_requested_items if total_requested_items > 0 else 0.0
 
     # Fragility penalty
+    # Per task spec: fragile=true means "нельзя ставить под не-хрупкий груз тяжелее 2 кг"
+    # So fragile-on-fragile is NOT a violation, only non-fragile heavy on fragile counts
     fragility_violations = 0
     for top in placements:
         if top["weight"] <= 2.0:
             continue
+        if top["fragile"]:
+            continue  # fragile-on-fragile is allowed per task definition
         for bottom in placements:
             if not bottom["fragile"]:
                 continue
