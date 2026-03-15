@@ -1,46 +1,27 @@
-# AI CHEMP — X5 Tech Smart 3D Packing
+# Решение: 3D-оптимизатор укладки паллет (Х5 Tech)
 
-3D Pallet Packing Optimizer для задачи укладки коробов на паллеты в фуд-ритейле.
+---
 
-## Описание задачи
+## Информация о команде
 
-Разработать алгоритм, который по списку коробов (разный размер, вес, хрупкость) и параметрам паллеты строит оптимальный план укладки. Решение должно:
+| Поле | Данные |
+| :-- | :-- |
+| **Название команды** | R2BD |
+| **Город** | Санкт-Петербург |
+| **Площадка** | ИТМО |
 
-- Максимизировать плотность укладки (volume utilization)
-- Разместить как можно больше товаров (item coverage)
-- Учитывать хрупкость (fragile items сверху)
-- Работать быстро (< 1 сек = максимальный балл за скорость)
+### Состав команды
 
-Подробнее: [docs/task.md](docs/task.md)
+|  | ФИО | Роль в команде | Вуз | Курс / год выпуска |
+| :-- | :-- | :-- | :-- | :-- |
+| 1 | Яснов Михаил | | ИТМО | 3 курс/2027 | |
+| 2 | Козак Борис | | ИТМО | 4 курс/2026| |
+| 3 | Хачатрян Геворк| | ИТМО | 3 курс/2027 | |
+| 4 | Пепеляев Мирон | | СПбГУ| 1 курс магистратуры/2027 |
 
-## Структура проекта
+---
 
-```
-├── solver/                # Пакет солвера (основная работа здесь)
-│   ├── __init__.py
-│   ├── models.py          # Модели данных: Box, Pallet, Placement, Solution
-│   ├── orientations.py    # Генерация допустимых ориентаций (strict_upright)
-│   ├── pallet_state.py    # Состояние паллеты: Extreme Points, проверки
-│   ├── scoring.py         # Scoring-функция для ранжирования кандидатов
-│   ├── packer.py          # Greedy packer: основной цикл размещения
-│   ├── solver.py          # Multi-restart обёртка
-│   ├── cli.py             # CLI-интерфейс
-│   └── __main__.py        # Запуск через python -m solver
-├── tests/                 # Тесты
-│   ├── test_models.py
-│   ├── test_orientations.py
-│   ├── test_pallet_state.py
-│   ├── test_scoring.py
-│   ├── test_packer.py
-│   └── test_solver.py     # Интеграционные тесты (все сценарии)
-├── generator.py           # Генератор тестовых сценариев
-├── validator.py           # Валидатор решений (hard constraints + scoring)
-├── benchmark.py           # Бенчмарк: прогон всех сценариев с отчётом
-├── docs/                  # Документация и исследования
-│   └── task.md            # Описание задачи
-└── requirements.txt       # Зависимости
-```
-
+## Описание решения
 ## Быстрый старт
 
 ```bash
@@ -51,177 +32,101 @@ cd x5-tech-ai-champ
 # Установить зависимости
 pip install -r requirements.txt
 
-# Сгенерировать тестовые данные
+# Сгенерировать локальные примеры request_*.json
 python generator.py
 
-# Запустить солвер
+# Решить один request
 python -m solver request_heavy_water.json -o response.json
 
-# Запустить все тесты
+# Прогнать тесты
 pytest tests/ -v
 
-# Запустить бенчмарк (все сценарии + скоры)
+# Основной benchmark
 python benchmark.py
+
+# Веб-лаборатория
+python webapp.py
 ```
 
-## Как внести изменения (workflow для команды)
+После запуска web UI откройте `http://127.0.0.1:3030/`.
 
-### 1. Создать ветку
+Порт и хост можно переопределить через переменные окружения `PORT` и `HOST`.
+
+## CLI
 
 ```bash
-git checkout main
-git pull
-git checkout -b my-improvement
+python -m solver <input.json> [options]
 ```
 
-### 2. Внести изменения в солвер
+### Основные опции
 
-Основные файлы для улучшений:
+| Опция           | Значение по умолчанию | Что делает                                                                    |
+| --------------- | --------------------: | ----------------------------------------------------------------------------- |
+| `inputs`        |                     — | Один или несколько request JSON                                               |
+| `-o, --output`  |                  auto | Явный output only для single-input запуска                                    |
+| `--strategy`    |     `portfolio_block` | `portfolio_block`, `legacy_hybrid`, `legacy_greedy`                           |
+| `--time-budget` |                 `900` | Тайм-бюджет на задачу в миллисекундах                                         |
+| `--model-dir`   |              `models` | Папка с optional ML artifact'ами                                              |
+| `--beam-width`  |               derived | Явный beam width для `legacy_hybrid`                                          |
+| `--restarts`    |                  `10` | Legacy effort knob; если `--beam-width` не задан, конвертируется в beam width |
+| `--log-level`   |                `INFO` | `DEBUG`, `INFO`, `WARN`, `WARNING`, `ERROR`                                   |
 
-| Файл | Что менять |
-|------|-----------|
-| `solver/scoring.py` | Веса и компоненты scoring-функции |
-| `solver/packer.py` | Алгоритм упаковки, стратегии сортировки |
-| `solver/solver.py` | Multi-restart логика, параметры |
-| `solver/pallet_state.py` | Extreme Points, проверки, новые предикаты |
-
-### 3. Проверить локально
+### Примеры
 
 ```bash
-# Тесты должны проходить
-pytest tests/ -v
+# Один файл -> один output
+python -m solver request_heavy_water.json -o result.json
 
-# Бенчмарк покажет скоры
-python benchmark.py
+# Batch: output-файлы будут названы как response_<name>.json
+python -m solver request_*.json
+
+# Принудительно включить legacy_hybrid и указать beam width
+python -m solver request_random_mixed.json --strategy legacy_hybrid --beam-width 4
+
+# Увеличить time budget
+python -m solver request_random_mixed.json --time-budget 5000
 ```
 
-### 4. Запушить и создать PR
+### Подход
 
-```bash
-git add -A
-git commit -m "improve: описание улучшения"
-git push -u origin my-improvement
-```
+`portfolio_block` сейчас делает не один жадный проход, а короткий runtime-портфель кандидатов:
 
-Создайте Pull Request в `main`. CI автоматически:
-- Прогонит тесты
-- Запустит бенчмарк на всех сценариях
-- Покажет скоры в комментарии к PR
+1. Считает `ScenarioFingerprint` по request.
+2. Ранжирует `seed_family` через fallback-эвристику и optional XGBoost selector.
+3. Запускает только верхние 2-3 seed family вместо полного перебора.
+4. Для greedy seed'ов при необходимости пробует специальные варианты:
+   - `pack_upright_layered`
+   - `pack_small_column_volume_first`
+   - staged / prefill-последовательности
+   - строгий fragile-aware прогон
+   - маленький beam-кандидат на компактных diverse-case входах
+5. Для лучшего greedy-кандидата делает local order search по первым SKU.
+6. Применяет repair-стадию:
+   - remove-and-refill
+   - fragility micro-repack
+   - block repair для block-based runs
+7. Финализирует placements и unplaced.
 
-### 5. Ревью и мёрдж
-
-После проверки скоров и code review — мёрдж в `main`.
-
-## Hard Constraints (нарушение = 0 баллов)
-
-| # | Ограничение | Проверка |
-|---|------------|---------|
-| 1 | Коробы внутри паллеты | AABB bounds check |
-| 2 | Нет пересечений | AABB collision |
-| 3 | Опора ≥ 60% площади | Support area calculation |
-| 4 | strict_upright → только Z-ось вращения | Orientation filter |
-| 5 | Вес ≤ max_weight_kg | Weight accumulator |
-
-## Scoring
-
-```
-final_score = 0.50 × volume_utilization
-            + 0.30 × item_coverage
-            + 0.10 × fragility_score
-            + 0.10 × time_score
-```
-
-| Метрика | Вес | Описание |
-|---------|-----|----------|
-| Volume Utilization | 50% | Плотность укладки |
-| Item Coverage | 30% | Доля размещённых товаров |
-| Fragility Score | 10% | Штраф за тяжёлое на хрупком |
-| Time Score | 10% | ≤1s→1.0, ≤5s→0.7, ≤30s→0.3, >30s→0.0 |
-
-## Формат данных
-
-<details>
-<summary>Request JSON</summary>
-
-```json
-{
-  "task_id": "test_case_042",
-  "pallet": {
-    "length_mm": 1200,
-    "width_mm": 800,
-    "max_height_mm": 1800,
-    "max_weight_kg": 1500.0
-  },
-  "boxes": [
-    {
-      "sku_id": "SKU-SHO-1234",
-      "description": "Shoe Box",
-      "length_mm": 330,
-      "width_mm": 190,
-      "height_mm": 115,
-      "weight_kg": 1.0,
-      "quantity": 10,
-      "strict_upright": false,
-      "fragile": false,
-      "stackable": true
-    }
-  ]
-}
-```
-
-</details>
-
-<details>
-<summary>Response JSON</summary>
-
-```json
-{
-  "task_id": "test_case_042",
-  "solver_version": "1.0.0",
-  "solve_time_ms": 248,
-  "placements": [
-    {
-      "sku_id": "SKU-SHO-1234",
-      "instance_index": 0,
-      "position": { "x_mm": 0, "y_mm": 0, "z_mm": 0 },
-      "dimensions_placed": { "length_mm": 330, "width_mm": 190, "height_mm": 115 },
-      "rotation_code": "LWH"
-    }
-  ],
-  "unplaced": []
-}
-```
-
-</details>
-
-## Baseline Benchmark (отправная точка)
-
-| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
-|----------|-------|--------|----------|-----------|------------|--------|-----------|
-| heavy_water | **0.7434** | 0.7281 | 0.5978 | 1.0000 | 1.0000 | 107/179 | 389 |
-| fragile_tower | **0.6214** | 0.6382 | 0.3409 | 1.0000 | 1.0000 | 15/44 | 9 |
-| liquid_tetris | **0.6846** | 0.3992 | 1.0000 | 0.8500 | 1.0000 | 84/84 | 249 |
-| random_mixed | **0.7023** | 0.8198 | 0.4579 | 0.5500 | 1.0000 | 49/107 | 112 |
-| **Average** | **0.6879** | | | | | | |
-
-> Дата: 2026-03-14. Solver v1.0.0, greedy + multi-restart (5 стратегий), budget 900ms.
-
-## Архитектура baseline-солвера
-
-**Extreme Points + Greedy + Multi-restart**
-
-1. **Extreme Points** — генерация кандидатных позиций (не полный перебор x,y,z)
-2. **Greedy packer** — для каждого короба выбирает лучшую позицию × ориентацию по scoring-функции
-3. **Multi-restart** — прогоняет 5 стратегий сортировки, выбирает лучший скор
-
-Стратегии сортировки: `volume_desc`, `weight_desc`, `base_area_desc`, `density_desc`, `constrained_first`
-
-## Направления улучшений
-
-- [ ] Beam search вместо greedy (ширина луча = качество vs скорость)
-- [ ] Layer-based packing (укладка слоями)
-- [ ] LNS (Large Neighborhood Search) — локальный поиск с перестроением
-- [ ] Тюнинг весов scoring-функции
-- [ ] Больше стратегий сортировки для multi-restart
-- [ ] Учёт `stackable: false` в валидаторе
-- [ ] 3D-визуализация (plotly/matplotlib)
+### Архитектура решения
+Алгоритмы, используемые в решении
+- Extreme Points
+- Greedy packing
+- Layered / staged constructive packing
+- Block-based packing
+- Small beam search
+- Local order search
+- Repair / remove-and-refill
+- Portfolio selection
+- частично ML ranking:
+  - selector для выбора стратегии
+  - ranker для block-кандидатов
+### Ключевые особенности
+- не один solver, а runtime portfolio
+- сначала классифицирует заказ, потом решает, как его паковать
+- сочетает несколько типов конструктивных алгоритмов
+- общая геометрия и общая feasibility-логика для всех путей
+- ML не заменяет solver, а только ранжирует варианты
+- учитывает fragility и stackability не только в validator, но и внутри поиска
+- умеет включать специальные режимы для upright/fragile/overload кейсов
+- после построения решения делает локальное улучшение и repair
+- ориентирован на быстрый выбор сильных кандидатов, а не на полный перебор
