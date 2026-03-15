@@ -872,8 +872,36 @@ def _proxy_upper_bound(request: Dict[str, Any]) -> float:
     return 0.50 * vol_cap + 0.30 + 0.10
 
 
+def _request_score_ceiling(request: Dict[str, Any]) -> float:
+    pallet = request["pallet"]
+    total_volume = sum(
+        box["length_mm"] * box["width_mm"] * box["height_mm"] * box["quantity"]
+        for box in request["boxes"]
+    )
+    pallet_volume = (
+        pallet["length_mm"] * pallet["width_mm"] * pallet["max_height_mm"]
+    )
+    volume_util = total_volume / max(pallet_volume, 1)
+    return round(0.50 * volume_util + 0.30 + 0.10 + 0.10, 4)
+
+
 def _is_near_proxy_upper_bound(score: float, upper_bound: float) -> bool:
     return score >= upper_bound - 0.01
+
+
+def _run_hits_score_ceiling(
+    request: Dict[str, Any],
+    run: PolicyRun,
+    total_items: int,
+) -> bool:
+    if len(run.placements) != total_items or run.elapsed_ms > 1000:
+        return False
+    preview = _preview_validator_score(
+        request=request,
+        placements=run.placements,
+        solve_time_ms=max(run.elapsed_ms, 1),
+    )
+    return preview[0] >= _request_score_ceiling(request) - 1e-6
 
 
 def _run_seed_family(
@@ -981,25 +1009,30 @@ def _run_greedy_seed_family(
         ordered_skus=tuple(box.sku_id for box in ordered_boxes),
     )
     candidates = [base_run]
+    if seed_family == "liquid_fill" and _run_hits_score_ceiling(
+        request,
+        base_run,
+        total_items,
+    ):
+        return base_run
     if allow_staged_variant and seed_family == "fragile_density":
         fingerprint = compute_request_fingerprint(request)
         if _should_try_small_column_candidate(fingerprint):
-            candidates.append(
-                _policy_run_from_solution(
-                    request=request,
-                    solution=pack_small_column_volume_first(
-                        task_id,
-                        pallet,
-                        boxes,
-                        label=f"{label}:small_columns",
-                        time_budget_ms=min(120, budget_ms),
-                    ),
-                    total_items=total_items,
-                    name=f"{run_name}:small_columns",
-                    seed_family=seed_family,
-                    ordered_skus=(),
-                )
+            small_columns = _policy_run_from_solution(
+                request=request,
+                solution=pack_small_column_volume_first(
+                    task_id,
+                    pallet,
+                    boxes,
+                    label=f"{label}:small_columns",
+                    time_budget_ms=min(120, budget_ms),
+                ),
+                total_items=total_items,
+                name=f"{run_name}:small_columns",
+                seed_family=seed_family,
+                ordered_skus=(),
             )
+            candidates.append(small_columns)
         staged_variants = [
             ("staged", _fragile_staged_instances(boxes, pallet)),
         ]
@@ -1030,92 +1063,79 @@ def _run_greedy_seed_family(
         for suffix, staged_instances in staged_variants:
             if not staged_instances:
                 continue
-            candidates.append(
-                _policy_run_from_solution(
+            staged_run = _policy_run_from_solution(
+                request=request,
+                solution=pack_instance_sequence(
+                    task_id,
+                    pallet,
+                    staged_instances,
+                    label=f"{label}:{suffix}",
+                    strict_fragility=strict_fragility,
+                ),
+                total_items=total_items,
+                name=f"{run_name}:{suffix}",
+                seed_family=seed_family,
+                ordered_skus=(),
+            )
+            candidates.append(staged_run)
+    if seed_family == "liquid_fill":
+        fingerprint = compute_request_fingerprint(request)
+        if _should_try_upright_prefill_staging(fingerprint):
+            regular_prefill = _upright_prefill_instances(boxes)
+            deep_prefill = _upright_prefill_instances(
+                boxes,
+                filler_ratio=0.9,
+                delicate_ratio=2.0 / 3.0,
+            )
+            prefill_variants = [
+                ("upright_prefill_deep", deep_prefill, strict_fragility),
+                ("upright_prefill", regular_prefill, strict_fragility),
+            ]
+            if not strict_fragility and fingerprint.fragile_ratio >= 0.20:
+                prefill_variants = [
+                    ("upright_prefill_deep_safe", deep_prefill, True),
+                    ("upright_prefill_deep", deep_prefill, False),
+                    ("upright_prefill_safe", regular_prefill, True),
+                    ("upright_prefill", regular_prefill, False),
+                ]
+            for suffix, prefill_instances, variant_strict_fragility in prefill_variants:
+                if not prefill_instances:
+                    continue
+                prefill_run = _policy_run_from_solution(
                     request=request,
                     solution=pack_instance_sequence(
                         task_id,
                         pallet,
-                        staged_instances,
+                        prefill_instances,
                         label=f"{label}:{suffix}",
-                        strict_fragility=strict_fragility,
+                        strict_fragility=variant_strict_fragility,
                     ),
                     total_items=total_items,
                     name=f"{run_name}:{suffix}",
                     seed_family=seed_family,
                     ordered_skus=(),
                 )
-            )
-    if seed_family == "liquid_fill":
-        fingerprint = compute_request_fingerprint(request)
+                candidates.append(prefill_run)
+                if _run_hits_score_ceiling(request, prefill_run, total_items):
+                    return prefill_run
         if _should_try_upright_layered_candidate(fingerprint):
-            candidates.append(
-                _policy_run_from_solution(
-                    request=request,
-                    solution=pack_upright_layered(
-                        task_id,
-                        pallet,
-                        boxes,
-                        label=f"{label}:layered",
-                        time_budget_ms=min(140, budget_ms),
-                    ),
-                    total_items=total_items,
-                    name=f"{run_name}:layered",
-                    seed_family=seed_family,
-                    ordered_skus=(),
-                )
-            )
-        if _should_try_upright_prefill_staging(fingerprint):
-            prefill_variants = [
-                ("upright_prefill", _upright_prefill_instances(boxes), strict_fragility),
-                (
-                    "upright_prefill_deep",
-                    _upright_prefill_instances(
-                        boxes,
-                        filler_ratio=0.9,
-                        delicate_ratio=2.0 / 3.0,
-                    ),
-                    strict_fragility,
+            layered_run = _policy_run_from_solution(
+                request=request,
+                solution=pack_upright_layered(
+                    task_id,
+                    pallet,
+                    boxes,
+                    label=f"{label}:layered",
+                    time_budget_ms=min(140, budget_ms),
                 ),
-            ]
-            if not strict_fragility and fingerprint.fragile_ratio >= 0.20:
-                prefill_variants.extend(
-                    [
-                        (
-                            "upright_prefill_safe",
-                            _upright_prefill_instances(boxes),
-                            True,
-                        ),
-                        (
-                            "upright_prefill_deep_safe",
-                            _upright_prefill_instances(
-                                boxes,
-                                filler_ratio=0.9,
-                                delicate_ratio=2.0 / 3.0,
-                            ),
-                            True,
-                        ),
-                    ]
-                )
-            for suffix, prefill_instances, variant_strict_fragility in prefill_variants:
-                if not prefill_instances:
-                    continue
-                candidates.append(
-                    _policy_run_from_solution(
-                        request=request,
-                        solution=pack_instance_sequence(
-                            task_id,
-                            pallet,
-                            prefill_instances,
-                            label=f"{label}:{suffix}",
-                            strict_fragility=variant_strict_fragility,
-                        ),
-                        total_items=total_items,
-                        name=f"{run_name}:{suffix}",
-                        seed_family=seed_family,
-                        ordered_skus=(),
-                    )
-                )
+                total_items=total_items,
+                name=f"{run_name}:layered",
+                seed_family=seed_family,
+                ordered_skus=(),
+            )
+            candidates.append(layered_run)
+            if _run_hits_score_ceiling(request, layered_run, total_items):
+                return layered_run
     if len(candidates) > 1:
         run = _select_best_seed_candidate(request, candidates)
     else:
