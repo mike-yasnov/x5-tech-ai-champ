@@ -14,6 +14,7 @@
 - Генератор сценариев, benchmark, constraint-benchmark, сравнение baseline-сортировок.
 - Веб-лаборатория на FastAPI + NiceGUI с историей экспериментов и встроенной 3D-визуализацией.
 - Шипованный XGBoost selector в [`models/selector_xgb.json`](models/selector_xgb.json); block ranker можно дообучить отдельно.
+- Подробная архитектурная записка про логику solver и пример реального request: [docs/SOLVER_PIPELINE.md](docs/SOLVER_PIPELINE.md)
 
 Подробнее о постановке: [docs/task.md](docs/task.md)
 
@@ -41,6 +42,7 @@
 │   └── selector_meta.json         # Метаданные selector'а
 ├── docs/
 │   ├── task.md                    # Описание кейса
+│   ├── SOLVER_PIPELINE.md         # Как устроен solver на уровне алгоритма
 │   ├── TEST_SCENARIOS.md          # Каталог benchmark-сценариев
 │   └── selector_report.md         # Генерируемый отчёт selector evaluation
 ├── generator.py                   # Генератор synthetic request'ов
