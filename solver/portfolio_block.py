@@ -28,6 +28,7 @@ from .packer import (
     pack_greedy,
     pack_instance_sequence,
     pack_ordered_boxes,
+    pack_small_column_volume_first,
     pack_upright_layered,
 )
 from .scenario_selector import (
@@ -229,6 +230,13 @@ def solve_request(
     low_ceiling = _is_low_ceiling_pressure(fingerprint)
     fragile_dominant = _is_fragile_dominant_fingerprint(fingerprint)
     prefer_safe_fragility = _should_use_conservative_fragility_selection(fingerprint)
+    strict_safe_selection = (
+        fingerprint.volume_ratio <= 1.10
+        and (
+            fingerprint.non_stackable_ratio >= 0.05
+            or fingerprint.upright_ratio >= 0.45
+        )
+    )
     fast_overload_path = _should_use_fast_overload_path(fingerprint)
     add_strict_fragility_run = _should_add_strict_fragility_run(request, fingerprint)
     try_small_beam = _should_try_small_beam(fingerprint)
@@ -377,7 +385,7 @@ def solve_request(
         and not fast_overload_path
     )
     best_two = sorted(
-        runs,
+        _safe_fragility_pool(runs) if strict_safe_selection else runs,
         key=lambda candidate: _top_level_run_sort_key(
             candidate,
             request,
@@ -386,8 +394,21 @@ def solve_request(
         reverse=True,
     )[:2]
     if best_two and enable_repair:
-        per_run_repair_ms = max(35, repair_budget_ms // len(best_two))
-        for candidate in best_two:
+        repair_targets = best_two
+        if (
+            fingerprint.total_items <= 60
+            and fingerprint.sku_count <= 3
+            and fragile_dominant
+        ):
+            repair_targets = best_two[:1]
+        per_run_repair_ms = max(35, repair_budget_ms // max(len(repair_targets), 1))
+        if (
+            fingerprint.total_items <= 60
+            and fingerprint.sku_count <= 3
+            and fragile_dominant
+        ):
+            per_run_repair_ms = max(per_run_repair_ms, 80)
+        for candidate in repair_targets:
             elapsed_so_far = int((time.perf_counter() - t0) * 1000)
             budget_left = max(0, time_budget_ms - elapsed_so_far)
             if budget_left <= 20:
@@ -405,7 +426,7 @@ def solve_request(
                 runs.append(repaired)
 
     best = max(
-        runs,
+        _safe_fragility_pool(runs) if strict_safe_selection else runs,
         key=lambda candidate: _top_level_run_sort_key(
             candidate,
             request,
@@ -871,6 +892,24 @@ def _run_greedy_seed_family(
     )
     candidates = [base_run]
     if allow_staged_variant and seed_family == "fragile_density":
+        fingerprint = compute_request_fingerprint(request)
+        if _should_try_small_column_candidate(fingerprint):
+            candidates.append(
+                _policy_run_from_solution(
+                    request=request,
+                    solution=pack_small_column_volume_first(
+                        task_id,
+                        pallet,
+                        boxes,
+                        label=f"{label}:small_columns",
+                        time_budget_ms=min(120, budget_ms),
+                    ),
+                    total_items=total_items,
+                    name=f"{run_name}:small_columns",
+                    seed_family=seed_family,
+                    ordered_skus=(),
+                )
+            )
         staged_variants = [
             ("staged", _fragile_staged_instances(boxes, pallet)),
         ]
@@ -1084,6 +1123,17 @@ def _should_try_upright_layered_candidate(
         and fingerprint.upright_ratio >= 0.95
         and fingerprint.non_stackable_ratio >= 0.15
         and fingerprint.volume_ratio <= 0.65
+    )
+
+
+def _should_try_small_column_candidate(
+    fingerprint: ScenarioFingerprint,
+) -> bool:
+    return (
+        fingerprint.total_items <= 60
+        and fingerprint.sku_count <= 3
+        and fingerprint.volume_ratio >= 1.0
+        and fingerprint.fragile_ratio >= 0.45
     )
 
 
@@ -1577,6 +1627,18 @@ def _repair_selection_key(
     if fragility_score > base_fragility_score + 1e-9:
         fragility_bonus = 0.30 * (fragility_score - base_fragility_score)
     return (run.score + fragility_bonus, -run.elapsed_ms)
+
+
+def _safe_fragility_pool(
+    runs: Sequence[PolicyRun],
+    threshold: float = 0.95,
+) -> List[PolicyRun]:
+    safe = [
+        run
+        for run in runs
+        if _fragility_score_from_placements(run.placements) >= threshold
+    ]
+    return safe if safe else list(runs)
 
 
 def _repair_fragility_micro_repack(
