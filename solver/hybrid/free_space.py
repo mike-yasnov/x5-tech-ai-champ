@@ -19,7 +19,10 @@ class ExtremePointManager:
         self._points: Set[Tuple[int, int, int]] = {(0, 0, 0)}
 
     def get_points(self) -> List[Tuple[int, int, int]]:
-        return list(self._points)
+        return sorted(
+            self._points,
+            key=lambda point: (point[2], point[0] + point[1], point[0], point[1]),
+        )
 
     def update_after_placement(self, aabb: AABB, state: PalletState) -> None:
         """Generate new extreme points from the placed box and project z down."""
