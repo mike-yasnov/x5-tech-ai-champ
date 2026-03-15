@@ -1,7 +1,7 @@
 """Benchmark: run solver on all scenarios and report scores.
 
 Usage:
-    python benchmark.py [--restarts N] [--output results.json]
+    python benchmark.py [--restarts N] [--output results.json] [--viz out_dir]
 
 Outputs a markdown table and optionally a JSON file with detailed results.
 """
@@ -9,14 +9,13 @@ Outputs a markdown table and optionally a JSON file with detailed results.
 import argparse
 import json
 import os
-import sys
 import time
 
 from generator import generate_scenario
-from solver.packer import SORT_KEYS
-from validator import evaluate_solution
-from solver.models import Pallet, Box, solution_to_dict
+from solver.heuristics import STRATEGY_CONFIGS
+from solver.models import Box, Pallet, solution_to_dict
 from solver.solver import solve
+from validator import evaluate_solution
 
 
 ORGANIZER_SCENARIOS = [
@@ -38,37 +37,37 @@ SCENARIOS = ORGANIZER_SCENARIOS + PROJECT_SCENARIOS
 
 
 def _request_to_models(request_dict: dict):
-    p = request_dict["pallet"]
+    pallet_data = request_dict["pallet"]
     pallet = Pallet(
-        type_id=p.get("type_id", "unknown"),
-        length_mm=p["length_mm"],
-        width_mm=p["width_mm"],
-        max_height_mm=p["max_height_mm"],
-        max_weight_kg=p["max_weight_kg"],
+        type_id=pallet_data.get("type_id", "unknown"),
+        length_mm=pallet_data["length_mm"],
+        width_mm=pallet_data["width_mm"],
+        max_height_mm=pallet_data["max_height_mm"],
+        max_weight_kg=pallet_data["max_weight_kg"],
     )
     boxes = []
-    for b in request_dict["boxes"]:
+    for box_data in request_dict["boxes"]:
         boxes.append(
             Box(
-                sku_id=b["sku_id"],
-                description=b.get("description", ""),
-                length_mm=b["length_mm"],
-                width_mm=b["width_mm"],
-                height_mm=b["height_mm"],
-                weight_kg=b["weight_kg"],
-                quantity=b["quantity"],
-                strict_upright=b.get("strict_upright", False),
-                fragile=b.get("fragile", False),
-                stackable=b.get("stackable", True),
+                sku_id=box_data["sku_id"],
+                description=box_data.get("description", ""),
+                length_mm=box_data["length_mm"],
+                width_mm=box_data["width_mm"],
+                height_mm=box_data["height_mm"],
+                weight_kg=box_data["weight_kg"],
+                quantity=box_data["quantity"],
+                strict_upright=box_data.get("strict_upright", False),
+                fragile=box_data.get("fragile", False),
+                stackable=box_data.get("stackable", True),
             )
         )
     return request_dict["task_id"], pallet, boxes
 
 
-def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
+def run_benchmark(n_restarts: int | None = None, time_budget_ms: int = 5000) -> list:
     results = []
     if n_restarts is None:
-        n_restarts = len(SORT_KEYS)
+        n_restarts = len(STRATEGY_CONFIGS)
 
     for scenario_type, seed in SCENARIOS:
         request_dict = generate_scenario(
@@ -89,8 +88,7 @@ def run_benchmark(n_restarts: int = 10, time_budget_ms: int = 5000) -> list:
 
         response_dict = solution_to_dict(solution)
         eval_result = evaluate_solution(request_dict, response_dict)
-
-        total_items = sum(b["quantity"] for b in request_dict["boxes"])
+        total_items = sum(box["quantity"] for box in request_dict["boxes"])
 
         entry = {
             "scenario": scenario_type,
@@ -125,90 +123,90 @@ def format_markdown(results: list) -> str:
         )
 
         total_score = 0.0
-        for r in rows:
-            m = r.get("metrics", {})
-            if r["valid"]:
+        for row in rows:
+            metrics = row.get("metrics", {})
+            if row["valid"]:
                 section.append(
-                    f"| {r['scenario']} "
-                    f"| **{r['final_score']:.4f}** "
-                    f"| {m.get('volume_utilization', 0):.4f} "
-                    f"| {m.get('item_coverage', 0):.4f} "
-                    f"| {m.get('fragility_score', 0):.4f} "
-                    f"| {m.get('time_score', 0):.4f} "
-                    f"| {r['placed']}/{r['total_items']} "
-                    f"| {r['solve_time_ms']} |"
+                    f"| {row['scenario']} "
+                    f"| **{row['final_score']:.4f}** "
+                    f"| {metrics.get('volume_utilization', 0):.4f} "
+                    f"| {metrics.get('item_coverage', 0):.4f} "
+                    f"| {metrics.get('fragility_score', 0):.4f} "
+                    f"| {metrics.get('time_score', 0):.4f} "
+                    f"| {row['placed']}/{row['total_items']} "
+                    f"| {row['solve_time_ms']} |"
                 )
-                total_score += r["final_score"]
+                total_score += row["final_score"]
             else:
                 section.append(
-                    f"| {r['scenario']} "
+                    f"| {row['scenario']} "
                     f"| **INVALID** "
                     f"| - | - | - | - "
-                    f"| {r['placed']}/{r['total_items']} "
-                    f"| {r['solve_time_ms']} |"
+                    f"| {row['placed']}/{row['total_items']} "
+                    f"| {row['solve_time_ms']} |"
                 )
 
-        avg = total_score / len(rows) if rows else 0
+        average = total_score / len(rows) if rows else 0
         section.append("")
-        section.append(f"**Average score: {avg:.4f}**")
+        section.append(f"**Average score: {average:.4f}**")
         section.append("")
         return section
 
     organizer_names = {name for name, _ in ORGANIZER_SCENARIOS}
-    organizer_results = [r for r in results if r["scenario"] in organizer_names]
-    project_results = [r for r in results if r["scenario"] not in organizer_names]
+    organizer_results = [row for row in results if row["scenario"] in organizer_names]
+    project_results = [row for row in results if row["scenario"] not in organizer_names]
 
     lines.extend(render_table("Сценарии организаторов", organizer_results))
     lines.extend(render_table("Наши synthetic/diagnostic сценарии", project_results))
 
-    overall_avg = (
-        sum(r["final_score"] for r in results if r["valid"]) / len(results)
+    overall_average = (
+        sum(row["final_score"] for row in results if row["valid"]) / len(results)
         if results
         else 0
     )
-    lines.append(f"**Overall average: {overall_avg:.4f}**")
+    lines.append(f"**Overall average: {overall_average:.4f}**")
 
-    # Constraint compliance table
     lines.append("")
     lines.append("### Constraint Compliance")
     lines.append("")
-    lines.append("| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |")
-    lines.append("|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|")
-    for r in results:
-        cc = r.get("constraint_checks", {})
-        if not r["valid"]:
-            lines.append(f"| {r['scenario']} | FAIL | - | - | - | - | - | - |")
+    lines.append(
+        "| Scenario | Bounds | Collision | Support 60% | Weight | Upright | Stackable | Fragility Viol. |"
+    )
+    lines.append(
+        "|----------|--------|-----------|-------------|--------|---------|-----------|-----------------|"
+    )
+    for row in results:
+        checks = row.get("constraint_checks", {})
+        if not row["valid"]:
+            lines.append(f"| {row['scenario']} | FAIL | - | - | - | - | - | - |")
             continue
 
-        def _fmt(v):
-            if v is True:
+        def _fmt(value):
+            if value is True or value == "pass":
                 return "PASS"
-            if v == "pass":
-                return "PASS"
-            if v == "n/a":
+            if value == "n/a":
                 return "n/a"
-            return str(v)
+            return str(value)
 
         lines.append(
-            f"| {r['scenario']} "
-            f"| {_fmt(cc.get('bounds', '?'))} "
-            f"| {_fmt(cc.get('no_collision', '?'))} "
-            f"| {_fmt(cc.get('support_60pct', '?'))} "
-            f"| {_fmt(cc.get('weight_limit', '?'))} "
-            f"| {_fmt(cc.get('strict_upright', '?'))} "
-            f"| {_fmt(cc.get('stackable', '?'))} "
-            f"| {cc.get('fragility_violations', '?')} |"
+            f"| {row['scenario']} "
+            f"| {_fmt(checks.get('bounds', '?'))} "
+            f"| {_fmt(checks.get('no_collision', '?'))} "
+            f"| {_fmt(checks.get('support_60pct', '?'))} "
+            f"| {_fmt(checks.get('weight_limit', '?'))} "
+            f"| {_fmt(checks.get('strict_upright', '?'))} "
+            f"| {_fmt(checks.get('stackable', '?'))} "
+            f"| {checks.get('fragility_violations', '?')} |"
         )
     lines.append("")
-
     return "\n".join(lines)
 
 
 def build_viz_data(results: list) -> list:
     """Extract visualization data from benchmark results."""
-    viz = []
-    for r in results:
-        boxes_meta = {b["sku_id"]: b for b in r.get("request_boxes", [])}
+    visualizations = []
+    for row in results:
+        boxes_meta = {box["sku_id"]: box for box in row.get("request_boxes", [])}
         placements = []
         for p in r.get("response", {}).get("placements", []):
             sku = boxes_meta.get(p["sku_id"], {})
@@ -256,11 +254,10 @@ def main():
     args = parser.parse_args()
 
     results = run_benchmark(n_restarts=args.restarts)
-    md = format_markdown(results)
-    print(md)
+    markdown = format_markdown(results)
+    print(markdown)
 
     if args.output:
-        # Save results without bulky response/request data
         slim_results = [
             {
                 k: v
@@ -269,8 +266,8 @@ def main():
             }
             for r in results
         ]
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(slim_results, f, indent=2, ensure_ascii=False)
+        with open(args.output, "w", encoding="utf-8") as file:
+            json.dump(slim_results, file, indent=2, ensure_ascii=False)
         print(f"\nDetailed results saved to {args.output}")
 
     if args.viz:
@@ -279,8 +276,8 @@ def main():
         viz_data = build_viz_data(results)
         viz_json_path = os.path.join(args.viz, "benchmark_viz.json")
         os.makedirs(args.viz, exist_ok=True)
-        with open(viz_json_path, "w", encoding="utf-8") as f:
-            json.dump(viz_data, f, ensure_ascii=False)
+        with open(viz_json_path, "w", encoding="utf-8") as file:
+            json.dump(viz_data, file, ensure_ascii=False)
         files = generate_html_files(viz_json_path, args.viz)
         print(f"\nGenerated {len(files)} 3D visualization(s) in {args.viz}/")
 

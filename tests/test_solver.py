@@ -1,8 +1,8 @@
 """Integration tests: generate scenarios, solve, validate."""
 
 import json
-import sys
 import os
+import sys
 
 import pytest
 
@@ -10,10 +10,11 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generator import generate_scenario
-from validator import evaluate_solution
-from solver.models import load_request, solution_to_dict, Pallet, Box
-from solver.packer import SORT_KEYS, pack_greedy
+from solver.heuristics import STRATEGY_CONFIGS
+from solver.models import Box, Pallet, load_request, solution_to_dict
+from solver.packer import pack_greedy
 from solver.solver import solve
+from validator import evaluate_solution
 
 
 SCENARIOS = [
@@ -35,28 +36,28 @@ def _make_request_dict(scenario_type: str, seed: int = 42) -> dict:
 
 def _request_to_models(request_dict: dict):
     """Convert request dict to (task_id, Pallet, list[Box])."""
-    p = request_dict["pallet"]
+    pallet_data = request_dict["pallet"]
     pallet = Pallet(
-        type_id=p.get("type_id", "unknown"),
-        length_mm=p["length_mm"],
-        width_mm=p["width_mm"],
-        max_height_mm=p["max_height_mm"],
-        max_weight_kg=p["max_weight_kg"],
+        type_id=pallet_data.get("type_id", "unknown"),
+        length_mm=pallet_data["length_mm"],
+        width_mm=pallet_data["width_mm"],
+        max_height_mm=pallet_data["max_height_mm"],
+        max_weight_kg=pallet_data["max_weight_kg"],
     )
     boxes = []
-    for b in request_dict["boxes"]:
+    for box_data in request_dict["boxes"]:
         boxes.append(
             Box(
-                sku_id=b["sku_id"],
-                description=b.get("description", ""),
-                length_mm=b["length_mm"],
-                width_mm=b["width_mm"],
-                height_mm=b["height_mm"],
-                weight_kg=b["weight_kg"],
-                quantity=b["quantity"],
-                strict_upright=b.get("strict_upright", False),
-                fragile=b.get("fragile", False),
-                stackable=b.get("stackable", True),
+                sku_id=box_data["sku_id"],
+                description=box_data.get("description", ""),
+                length_mm=box_data["length_mm"],
+                width_mm=box_data["width_mm"],
+                height_mm=box_data["height_mm"],
+                weight_kg=box_data["weight_kg"],
+                quantity=box_data["quantity"],
+                strict_upright=box_data.get("strict_upright", False),
+                fragile=box_data.get("fragile", False),
+                stackable=box_data.get("stackable", True),
             )
         )
     return request_dict["task_id"], pallet, boxes
@@ -105,9 +106,6 @@ def test_scenario_score_positive(scenario_type):
 
     assert result["valid"]
     assert result["final_score"] > 0, f"Score should be positive for {scenario_type}"
-    print(
-        f"\n  {scenario_type}: score={result['final_score']:.4f} metrics={result['metrics']}"
-    )
 
 
 @pytest.mark.parametrize("scenario_type", SCENARIOS)
@@ -142,23 +140,23 @@ def test_solution_format_complete():
         request_dict=request_dict,
     )
 
-    d = solution_to_dict(solution)
-    assert "task_id" in d
-    assert "solver_version" in d
-    assert "solve_time_ms" in d
-    assert "placements" in d
-    assert "unplaced" in d
+    data = solution_to_dict(solution)
+    assert "task_id" in data
+    assert "solver_version" in data
+    assert "solve_time_ms" in data
+    assert "placements" in data
+    assert "unplaced" in data
 
-    if d["placements"]:
-        p = d["placements"][0]
-        assert "sku_id" in p
-        assert "instance_index" in p
-        assert "position" in p
-        assert "x_mm" in p["position"]
-        assert "y_mm" in p["position"]
-        assert "z_mm" in p["position"]
-        assert "dimensions_placed" in p
-        assert "rotation_code" in p
+    if data["placements"]:
+        placement = data["placements"][0]
+        assert "sku_id" in placement
+        assert "instance_index" in placement
+        assert "position" in placement
+        assert "x_mm" in placement["position"]
+        assert "y_mm" in placement["position"]
+        assert "z_mm" in placement["position"]
+        assert "dimensions_placed" in placement
+        assert "rotation_code" in placement
 
 
 def test_exact_fit_scenario_is_near_perfect():
@@ -214,6 +212,7 @@ def test_diagnostic_scenarios_score_well(scenario_type, min_score):
     "scenario_type,min_spread",
     [
         ("fragile_mix", 0.015),
+        ("cavity_fill", 0.05),
     ],
 )
 def test_diagnostic_scenarios_separate_strategies(scenario_type, min_spread):
@@ -221,12 +220,15 @@ def test_diagnostic_scenarios_separate_strategies(scenario_type, min_spread):
     task_id, pallet, boxes = _request_to_models(request_dict)
 
     scores = []
-    for strategy_name in SORT_KEYS:
+    for strategy in STRATEGY_CONFIGS:
         solution = pack_greedy(
             task_id=task_id,
             pallet=pallet,
             boxes=boxes,
-            sort_key_name=strategy_name,
+            sort_key_name=strategy.sort_key_name,
+            placement_policy=strategy.placement_policy,
+            randomized=strategy.randomized,
+            noise_factor=strategy.noise_factor,
         )
         result = evaluate_solution(request_dict, solution_to_dict(solution))
         assert result["valid"] is True
