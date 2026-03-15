@@ -1,0 +1,1248 @@
+[
+  {
+    "scenario": "heavy_water",
+    "results": [
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.7434,
+        "metrics": {
+          "volume_utilization": 0.7281,
+          "item_coverage": 0.5978,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 107,
+        "time_ms": 122,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.7434,
+        "metrics": {
+          "volume_utilization": 0.7281,
+          "item_coverage": 0.5978,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 107,
+        "time_ms": 123,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.7329,
+        "metrics": {
+          "volume_utilization": 0.7171,
+          "item_coverage": 0.581,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 104,
+        "time_ms": 147,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.7329,
+        "metrics": {
+          "volume_utilization": 0.7171,
+          "item_coverage": 0.581,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 104,
+        "time_ms": 148,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.7329,
+        "metrics": {
+          "volume_utilization": 0.7171,
+          "item_coverage": 0.581,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 104,
+        "time_ms": 150,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.7329,
+        "metrics": {
+          "volume_utilization": 0.7171,
+          "item_coverage": 0.581,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 104,
+        "time_ms": 151,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "fragile_tower",
+    "results": [
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.6214,
+        "metrics": {
+          "volume_utilization": 0.6382,
+          "item_coverage": 0.3409,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 15,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.6214,
+        "metrics": {
+          "volume_utilization": 0.6382,
+          "item_coverage": 0.3409,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 15,
+        "time_ms": 1,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.6163,
+        "metrics": {
+          "volume_utilization": 0.6172,
+          "item_coverage": 0.4091,
+          "fragility_score": 0.85,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 2,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.6163,
+        "metrics": {
+          "volume_utilization": 0.6172,
+          "item_coverage": 0.4091,
+          "fragility_score": 0.85,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 2,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.5665,
+        "metrics": {
+          "volume_utilization": 0.5611,
+          "item_coverage": 0.3864,
+          "fragility_score": 0.7,
+          "time_score": 1.0
+        },
+        "placed": 17,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.5665,
+        "metrics": {
+          "volume_utilization": 0.5611,
+          "item_coverage": 0.3864,
+          "fragility_score": 0.7,
+          "time_score": 1.0
+        },
+        "placed": 17,
+        "time_ms": 3,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "liquid_tetris",
+    "results": [
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.6846,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.85,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 57,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.6196,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 62,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.6196,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 64,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.6196,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 104,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.6196,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 106,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.6196,
+        "metrics": {
+          "volume_utilization": 0.3992,
+          "item_coverage": 1.0,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 84,
+        "time_ms": 106,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "random_mixed",
+    "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.7023,
+        "metrics": {
+          "volume_utilization": 0.8198,
+          "item_coverage": 0.4579,
+          "fragility_score": 0.55,
+          "time_score": 1.0
+        },
+        "placed": 49,
+        "time_ms": 14,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.6759,
+        "metrics": {
+          "volume_utilization": 0.7739,
+          "item_coverage": 0.4299,
+          "fragility_score": 0.6,
+          "time_score": 1.0
+        },
+        "placed": 46,
+        "time_ms": 14,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.673,
+        "metrics": {
+          "volume_utilization": 0.8096,
+          "item_coverage": 0.5607,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 60,
+        "time_ms": 21,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.6396,
+        "metrics": {
+          "volume_utilization": 0.7832,
+          "item_coverage": 0.4766,
+          "fragility_score": 0.05,
+          "time_score": 1.0
+        },
+        "placed": 51,
+        "time_ms": 17,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.5429,
+        "metrics": {
+          "volume_utilization": 0.5102,
+          "item_coverage": 0.6262,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 67,
+        "time_ms": 100,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.5042,
+        "metrics": {
+          "volume_utilization": 0.4496,
+          "item_coverage": 0.5981,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 64,
+        "time_ms": 94,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "weight_limited_repeat",
+    "results": [
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.7904,
+        "metrics": {
+          "volume_utilization": 0.7617,
+          "item_coverage": 0.6985,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 95,
+        "time_ms": 112,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.7744,
+        "metrics": {
+          "volume_utilization": 0.743,
+          "item_coverage": 0.6765,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 92,
+        "time_ms": 113,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.7367,
+        "metrics": {
+          "volume_utilization": 0.7337,
+          "item_coverage": 0.5662,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 77,
+        "time_ms": 72,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.6536,
+        "metrics": {
+          "volume_utilization": 0.6293,
+          "item_coverage": 0.4632,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 63,
+        "time_ms": 80,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.6536,
+        "metrics": {
+          "volume_utilization": 0.6293,
+          "item_coverage": 0.4632,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 63,
+        "time_ms": 80,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.6536,
+        "metrics": {
+          "volume_utilization": 0.6293,
+          "item_coverage": 0.4632,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 63,
+        "time_ms": 81,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "fragile_cap_mix",
+    "results": [
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.7712,
+        "metrics": {
+          "volume_utilization": 0.7633,
+          "item_coverage": 0.8986,
+          "fragility_score": 0.2,
+          "time_score": 1.0
+        },
+        "placed": 62,
+        "time_ms": 10,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.7035,
+        "metrics": {
+          "volume_utilization": 0.7375,
+          "item_coverage": 0.7826,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 54,
+        "time_ms": 9,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.6059,
+        "metrics": {
+          "volume_utilization": 0.4975,
+          "item_coverage": 0.8406,
+          "fragility_score": 0.05,
+          "time_score": 1.0
+        },
+        "placed": 58,
+        "time_ms": 29,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.6059,
+        "metrics": {
+          "volume_utilization": 0.4975,
+          "item_coverage": 0.8406,
+          "fragility_score": 0.05,
+          "time_score": 1.0
+        },
+        "placed": 58,
+        "time_ms": 30,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.6009,
+        "metrics": {
+          "volume_utilization": 0.4975,
+          "item_coverage": 0.8406,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 58,
+        "time_ms": 36,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.6009,
+        "metrics": {
+          "volume_utilization": 0.4975,
+          "item_coverage": 0.8406,
+          "fragility_score": 0.0,
+          "time_score": 1.0
+        },
+        "placed": 58,
+        "time_ms": 37,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "mixed_column_repeat",
+    "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.8838,
+        "metrics": {
+          "volume_utilization": 0.7909,
+          "item_coverage": 0.961,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 74,
+        "time_ms": 23,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.8838,
+        "metrics": {
+          "volume_utilization": 0.7909,
+          "item_coverage": 0.961,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 74,
+        "time_ms": 24,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.8838,
+        "metrics": {
+          "volume_utilization": 0.7909,
+          "item_coverage": 0.961,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 74,
+        "time_ms": 24,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.8758,
+        "metrics": {
+          "volume_utilization": 0.775,
+          "item_coverage": 0.961,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 74,
+        "time_ms": 21,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.7526,
+        "metrics": {
+          "volume_utilization": 0.5754,
+          "item_coverage": 0.8831,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 68,
+        "time_ms": 30,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.7526,
+        "metrics": {
+          "volume_utilization": 0.5754,
+          "item_coverage": 0.8831,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 68,
+        "time_ms": 30,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "small_gap_fill",
+    "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.7917,
+        "metrics": {
+          "volume_utilization": 0.5833,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 22,
+        "time_ms": 5,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "non_stackable_caps",
+    "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.875,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 2,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.875,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 2,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.875,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 2,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.875,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.875,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.7667,
+        "metrics": {
+          "volume_utilization": 0.6667,
+          "item_coverage": 0.7778,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 14,
+        "time_ms": 0,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "exact_fit",
+    "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 1.0,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 4,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 1.0,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 4,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 1.0,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 4,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 1.0,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 4,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 1.0,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 4,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 1.0,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 1.0,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 4,
+        "time_ms": 0,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "fragile_mix",
+    "results": [
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.9664,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.9545,
+          "fragility_score": 0.8,
+          "time_score": 1.0
+        },
+        "placed": 21,
+        "time_ms": 3,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.9455,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8182,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 1,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.9455,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8182,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 1,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.9455,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8182,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 1,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.9455,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8182,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 18,
+        "time_ms": 1,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.9278,
+        "metrics": {
+          "volume_utilization": 0.9375,
+          "item_coverage": 0.8636,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 19,
+        "time_ms": 2,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "support_tetris",
+    "results": [
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.9571,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8571,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 12,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.9571,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8571,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 12,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.9571,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8571,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 12,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.9571,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.8571,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 12,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.8321,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 0.8571,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 12,
+        "time_ms": 1,
+        "error": null
+      },
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.8321,
+        "metrics": {
+          "volume_utilization": 0.75,
+          "item_coverage": 0.8571,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 12,
+        "time_ms": 1,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "cavity_fill",
+    "results": [
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.7111,
+        "metrics": {
+          "volume_utilization": 0.5556,
+          "item_coverage": 0.7778,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 14,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.6333,
+        "metrics": {
+          "volume_utilization": 0.6667,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 6,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.6333,
+        "metrics": {
+          "volume_utilization": 0.6667,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 6,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.6333,
+        "metrics": {
+          "volume_utilization": 0.6667,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 6,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.6333,
+        "metrics": {
+          "volume_utilization": 0.6667,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 6,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.6333,
+        "metrics": {
+          "volume_utilization": 0.6667,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 6,
+        "time_ms": 0,
+        "error": null
+      }
+    ]
+  },
+  {
+    "scenario": "count_preference",
+    "results": [
+      {
+        "strategy": "coverage_tie",
+        "valid": true,
+        "final_score": 0.9,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.6667,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 2,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "volume_desc",
+        "valid": true,
+        "final_score": 0.8,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 1,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "weight_desc",
+        "valid": true,
+        "final_score": 0.8,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 1,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "base_area_desc",
+        "valid": true,
+        "final_score": 0.8,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 1,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "density_desc",
+        "valid": true,
+        "final_score": 0.8,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 1,
+        "time_ms": 0,
+        "error": null
+      },
+      {
+        "strategy": "constrained_first",
+        "valid": true,
+        "final_score": 0.8,
+        "metrics": {
+          "volume_utilization": 1.0,
+          "item_coverage": 0.3333,
+          "fragility_score": 1.0,
+          "time_score": 1.0
+        },
+        "placed": 1,
+        "time_ms": 0,
+        "error": null
+      }
+    ]
+  }
+]

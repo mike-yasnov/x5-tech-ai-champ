@@ -1,7 +1,7 @@
 """Tests for solver.packer."""
 
 from solver.models import Box, Pallet
-from solver.packer import pack_greedy, SORT_KEYS
+from solver.packer import SORT_KEYS, pack_greedy, pack_upright_layered
 
 
 def _simple_pallet():
@@ -79,3 +79,17 @@ def test_solve_time_recorded():
     boxes = _simple_boxes()
     sol = pack_greedy("test", pallet, boxes)
     assert sol.solve_time_ms >= 0
+
+
+def test_pack_upright_layered_handles_upright_nonstackable_mix():
+    pallet = Pallet("EUR", 600, 400, 1200, 1000.0)
+    boxes = [
+        Box("BASE", "Base", 300, 200, 150, 6.0, 8, strict_upright=True, fragile=False, stackable=True),
+        Box("TOP", "Top", 250, 160, 200, 4.0, 4, strict_upright=True, fragile=True, stackable=False),
+    ]
+
+    sol = pack_upright_layered("layered", pallet, boxes, time_budget_ms=80)
+
+    assert sol.task_id == "layered"
+    assert len(sol.placements) > 0
+    assert len(sol.placements) <= sum(box.quantity for box in boxes)

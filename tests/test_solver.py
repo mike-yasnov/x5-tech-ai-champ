@@ -10,22 +10,13 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generator import generate_scenario
+from scenario_catalog import BENCHMARK_SCENARIO_NAMES
 from validator import evaluate_solution
 from solver.models import load_request, solution_to_dict, Pallet, Box
 from solver.packer import SORT_KEYS, pack_greedy
 from solver.solver import solve
 
-
-SCENARIOS = [
-    "heavy_water",
-    "fragile_tower",
-    "liquid_tetris",
-    "random_mixed",
-    "exact_fit",
-    "fragile_mix",
-    "support_tetris",
-    "cavity_fill",
-]
+SCENARIOS = BENCHMARK_SCENARIO_NAMES
 
 
 def _make_request_dict(scenario_type: str, seed: int = 42) -> dict:

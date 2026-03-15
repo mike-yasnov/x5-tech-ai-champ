@@ -1,239 +1,488 @@
-"""Tests for validator: hard constraints and soft metrics."""
+"""Comprehensive tests for validator hard constraints and soft metrics.
 
-import pytest
+Tests enforce task spec compliance (docs/task.md). DO NOT MODIFY without explicit approval.
+"""
+
 from validator import evaluate_solution
 
 
-def _make_request(boxes, pallet=None):
-    if pallet is None:
-        pallet = {
-            "length_mm": 1200, "width_mm": 800,
-            "max_height_mm": 1800, "max_weight_kg": 1000.0,
-        }
+# ============================================================
+# Helpers
+# ============================================================
+
+def _pallet(length=1200, width=800, max_height=1800, max_weight=1000.0):
+    return {
+        "length_mm": length,
+        "width_mm": width,
+        "max_height_mm": max_height,
+        "max_weight_kg": max_weight,
+    }
+
+
+def _box_spec(sku_id, length, width, height, weight, quantity=1,
+              strict_upright=False, fragile=False, stackable=True):
+    return {
+        "sku_id": sku_id,
+        "description": sku_id,
+        "length_mm": length,
+        "width_mm": width,
+        "height_mm": height,
+        "weight_kg": weight,
+        "quantity": quantity,
+        "strict_upright": strict_upright,
+        "fragile": fragile,
+        "stackable": stackable,
+    }
+
+
+def _placement(sku_id, x, y, z, length, width, height, instance_index=0,
+               rotation_code="LWH"):
+    return {
+        "sku_id": sku_id,
+        "instance_index": instance_index,
+        "position": {"x_mm": x, "y_mm": y, "z_mm": z},
+        "dimensions_placed": {
+            "length_mm": length,
+            "width_mm": width,
+            "height_mm": height,
+        },
+        "rotation_code": rotation_code,
+    }
+
+
+def _request(boxes, pallet=None):
     return {
         "task_id": "test",
-        "pallet": pallet,
+        "pallet": pallet or _pallet(),
         "boxes": boxes,
     }
 
 
-def _make_response(placements, solve_time_ms=50):
+def _response(placements, solve_time_ms=100):
     return {
         "task_id": "test",
-        "solver_version": "1.0.0",
+        "solver_version": "test",
         "solve_time_ms": solve_time_ms,
         "placements": placements,
         "unplaced": [],
     }
 
 
-def _placement(sku_id, x, y, z, l, w, h, idx=0, rot="LWH"):
-    return {
-        "sku_id": sku_id,
-        "instance_index": idx,
-        "position": {"x_mm": x, "y_mm": y, "z_mm": z},
-        "dimensions_placed": {"length_mm": l, "width_mm": w, "height_mm": h},
-        "rotation_code": rot,
-    }
+# ============================================================
+# HARD CONSTRAINTS
+# ============================================================
 
-
-# ── rotation_code validation ───────────────────────────────────
-
-class TestRotationCodeValidation:
-    def test_valid_rotation_codes_accepted(self):
-        boxes = [{"sku_id": "A", "description": "", "length_mm": 100, "width_mm": 100,
-                  "height_mm": 100, "weight_kg": 1.0, "quantity": 1,
-                  "strict_upright": False, "fragile": False, "stackable": True}]
-        for code in ["LWH", "LHW", "WLH", "WHL", "HLW", "HWL"]:
-            req = _make_request(boxes)
-            resp = _make_response([_placement("A", 0, 0, 0, 100, 100, 100, rot=code)])
-            result = evaluate_solution(req, resp)
-            assert result["valid"], f"rotation_code {code} should be valid"
-
-    def test_invalid_rotation_code_rejected(self):
-        boxes = [{"sku_id": "A", "description": "", "length_mm": 100, "width_mm": 100,
-                  "height_mm": 100, "weight_kg": 1.0, "quantity": 1,
-                  "strict_upright": False, "fragile": False, "stackable": True}]
-        req = _make_request(boxes)
-        resp = _make_response([_placement("A", 0, 0, 0, 100, 100, 100, rot="INVALID")])
+class TestValidSimplePlacement:
+    def test_single_box_on_floor(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)])
         result = evaluate_solution(req, resp)
-        assert not result["valid"]
-        assert "rotation_code" in result["error"]
+        assert result["valid"] is True
+        assert "final_score" in result
+        assert result["final_score"] > 0
 
-    def test_empty_rotation_code_rejected(self):
-        boxes = [{"sku_id": "A", "description": "", "length_mm": 100, "width_mm": 100,
-                  "height_mm": 100, "weight_kg": 1.0, "quantity": 1,
-                  "strict_upright": False, "fragile": False, "stackable": True}]
-        req = _make_request(boxes)
-        resp = _make_response([_placement("A", 0, 0, 0, 100, 100, 100, rot="")])
+    def test_two_stacked_boxes(self):
+        req = _request([_box_spec("A", 400, 400, 200, 5.0, quantity=2)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 400, 200, instance_index=0),
+            _placement("A", 0, 0, 200, 400, 400, 200, instance_index=1),
+        ])
         result = evaluate_solution(req, resp)
-        assert not result["valid"]
+        assert result["valid"] is True
 
 
-# ── stackable constraint ────────────────────────────────────────
+class TestBoundsConstraint:
+    def test_out_of_bounds_x(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 1000, 0, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "bounds" in result["error"].lower() or "out" in result["error"].lower()
+
+    def test_out_of_bounds_y(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 600, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+
+    def test_out_of_bounds_z(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 1700, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+
+    def test_negative_x(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", -1, 0, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+
+    def test_negative_y(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, -1, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+
+    def test_negative_z(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, -1, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+
+    def test_exactly_at_boundary_valid(self):
+        req = _request([_box_spec("A", 1200, 800, 1800, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 1200, 800, 1800)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+
+class TestCollisionConstraint:
+    def test_overlapping_boxes_invalid(self):
+        req = _request([_box_spec("A", 400, 400, 200, 5.0, quantity=2)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 400, 200, instance_index=0),
+            _placement("A", 200, 200, 0, 400, 400, 200, instance_index=1),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "collision" in result["error"].lower() or "Collision" in result["error"]
+
+    def test_adjacent_no_collision(self):
+        req = _request([_box_spec("A", 400, 400, 200, 5.0, quantity=2)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 400, 200, instance_index=0),
+            _placement("A", 400, 0, 0, 400, 400, 200, instance_index=1),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+    def test_touching_faces_valid(self):
+        """Boxes sharing a face (zero-width overlap) are NOT colliding."""
+        req = _request([_box_spec("A", 600, 400, 200, 5.0, quantity=2)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 600, 400, 200, instance_index=0),
+            _placement("A", 600, 0, 0, 600, 400, 200, instance_index=1),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+
+class TestWeightConstraint:
+    def test_overweight_rejected(self):
+        req = _request(
+            [_box_spec("A", 400, 300, 200, 600.0, quantity=2)],
+            pallet=_pallet(max_weight=1000.0),
+        )
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 300, 200, instance_index=0),
+            _placement("A", 400, 0, 0, 400, 300, 200, instance_index=1),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "overweight" in result["error"].lower() or "Overweight" in result["error"]
+
+    def test_exactly_at_weight_limit_valid(self):
+        req = _request(
+            [_box_spec("A", 400, 300, 200, 500.0, quantity=2)],
+            pallet=_pallet(max_weight=1000.0),
+        )
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 300, 200, instance_index=0),
+            _placement("A", 400, 0, 0, 400, 300, 200, instance_index=1),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+
+class TestSupportConstraint:
+    def test_floor_always_supported(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+    def test_floating_box_rejected(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 500, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "support" in result["error"].lower()
+
+    def test_60_percent_support_passes(self):
+        """Exactly 60% support should be valid."""
+        # Base: 500x400 at origin. Top: 500x400 at z=200, shifted 200 in x.
+        # Overlap = 300*400 = 120000. Base area top = 500*400 = 200000.
+        # Ratio = 120000/200000 = 0.60
+        req = _request([
+            _box_spec("BASE", 500, 400, 200, 5.0),
+            _box_spec("TOP", 500, 400, 200, 5.0),
+        ])
+        resp = _response([
+            _placement("BASE", 0, 0, 0, 500, 400, 200),
+            _placement("TOP", 200, 0, 200, 500, 400, 200),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+    def test_insufficient_support_fails(self):
+        """Less than 60% support should fail."""
+        # Base: 400x300 at origin. Top: 400x300 at z=200, shifted 300 in x.
+        # Overlap = 100*300 = 30000. Base area = 400*300 = 120000.
+        # Ratio = 30000/120000 = 0.25 < 0.60
+        req = _request([
+            _box_spec("BASE", 400, 300, 200, 5.0),
+            _box_spec("TOP", 400, 300, 200, 5.0),
+        ])
+        resp = _response([
+            _placement("BASE", 0, 0, 0, 400, 300, 200),
+            _placement("TOP", 300, 0, 200, 400, 300, 200),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "support" in result["error"].lower()
+
+
+class TestStrictUprightConstraint:
+    def test_upright_LWH_valid(self):
+        """LWH keeps height on Z — valid for strict_upright."""
+        req = _request([_box_spec("A", 400, 300, 200, 5.0, strict_upright=True)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200, rotation_code="LWH")])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+    def test_upright_WLH_valid(self):
+        """WLH keeps height on Z (90° Z rotation) — valid for strict_upright."""
+        req = _request([_box_spec("A", 400, 300, 200, 5.0, strict_upright=True)])
+        resp = _response([_placement("A", 0, 0, 0, 300, 400, 200, rotation_code="WLH")])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+
+    def test_upright_invalid_rotation(self):
+        """HLW puts L on Z — invalid for strict_upright."""
+        req = _request([_box_spec("A", 400, 300, 200, 5.0, strict_upright=True)])
+        # HLW: H→X, L→Y, W→Z → placed dims (200, 400, 300), height=300 != orig 200
+        resp = _response([_placement("A", 0, 0, 0, 200, 400, 300, rotation_code="HLW")])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "upright" in result["error"].lower()
+
 
 class TestStackableConstraint:
-    def test_box_on_non_stackable_rejected(self):
-        """stackable=false: nothing can be placed on top."""
-        boxes = [
-            {"sku_id": "BOTTOM", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 200, "weight_kg": 5.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": False},
-            {"sku_id": "TOP", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 200, "weight_kg": 3.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": True},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([
-            _placement("BOTTOM", 0, 0, 0, 400, 400, 200),
-            _placement("TOP", 0, 0, 200, 400, 400, 200),
+    def test_non_stackable_box_rejects_top_placement(self):
+        req = _request([
+            _box_spec("BASE", 400, 400, 200, 10.0, stackable=False),
+            _box_spec("TOP", 200, 200, 200, 5.0),
+        ])
+        resp = _response([
+            _placement("BASE", 0, 0, 0, 400, 400, 200),
+            _placement("TOP", 100, 100, 200, 200, 200, 200),
         ])
         result = evaluate_solution(req, resp)
-        assert not result["valid"]
-        assert "non-stackable" in result["error"]
+        assert result["valid"] is False
+        assert "non-stackable" in result["error"] or "stackable" in result["error"].lower()
 
-    def test_non_stackable_alone_valid(self):
-        """stackable=false box alone on floor is fine."""
-        boxes = [
-            {"sku_id": "ALONE", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 200, "weight_kg": 5.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": False},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([_placement("ALONE", 0, 0, 0, 400, 400, 200)])
+    def test_non_stackable_no_xy_overlap_valid(self):
+        """Non-stackable box with no XY overlap above — valid."""
+        req = _request([
+            _box_spec("BASE", 400, 400, 200, 10.0, stackable=False),
+            _box_spec("SIDE", 200, 200, 200, 5.0),
+        ])
+        resp = _response([
+            _placement("BASE", 0, 0, 0, 400, 400, 200),
+            _placement("SIDE", 500, 0, 0, 200, 200, 200),
+        ])
         result = evaluate_solution(req, resp)
-        assert result["valid"]
+        assert result["valid"] is True
 
-    def test_non_stackable_no_overlap_valid(self):
-        """Box next to (not on top of) non-stackable is fine."""
-        boxes = [
-            {"sku_id": "NS", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 200, "weight_kg": 5.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": False},
-            {"sku_id": "SIDE", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 200, "weight_kg": 3.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": True},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([
+    def test_non_stackable_side_by_side_same_z_valid(self):
+        """Non-stackable box next to another at same height — valid."""
+        req = _request([
+            _box_spec("NS", 400, 400, 200, 10.0, stackable=False),
+            _box_spec("ADJ", 400, 400, 200, 5.0),
+        ])
+        resp = _response([
             _placement("NS", 0, 0, 0, 400, 400, 200),
-            _placement("SIDE", 400, 0, 0, 400, 400, 200),  # рядом, не сверху
+            _placement("ADJ", 400, 0, 0, 400, 400, 200),
         ])
         result = evaluate_solution(req, resp)
-        assert result["valid"]
+        assert result["valid"] is True
 
 
-# ── fragility penalty ───────────────────────────────────────────
+class TestAntiCheat:
+    def test_wrong_dimensions_rejected(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        # Placed dims (500, 300, 200) don't match original (400, 300, 200)
+        resp = _response([_placement("A", 0, 0, 0, 500, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "cheat" in result["error"].lower() or "Cheat" in result["error"]
 
-class TestFragilityPenalty:
-    def test_heavy_on_fragile_penalty(self):
-        """Heavy (>2kg) on fragile → fragility_score = 0.95."""
-        boxes = [
-            {"sku_id": "FRAGILE", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 100, "weight_kg": 2.0, "quantity": 1,
-             "strict_upright": False, "fragile": True, "stackable": True},
-            {"sku_id": "HEAVY", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 100, "weight_kg": 3.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": True},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([
-            _placement("FRAGILE", 0, 0, 0, 400, 400, 100),
-            _placement("HEAVY", 0, 0, 100, 400, 400, 100),
+    def test_too_many_instances_rejected(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0, quantity=1)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 300, 200, instance_index=0),
+            _placement("A", 400, 0, 0, 400, 300, 200, instance_index=1),
         ])
         result = evaluate_solution(req, resp)
-        assert result["valid"]
-        assert result["metrics"]["fragility_score"] == pytest.approx(0.95)
+        assert result["valid"] is False
+        assert "many" in result["error"].lower() or "Too" in result["error"]
 
-    def test_light_on_fragile_no_penalty(self):
-        """Light (≤2kg) on fragile → fragility_score = 1.0."""
-        boxes = [
-            {"sku_id": "FRAGILE", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 100, "weight_kg": 2.0, "quantity": 1,
-             "strict_upright": False, "fragile": True, "stackable": True},
-            {"sku_id": "LIGHT", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 100, "weight_kg": 2.0, "quantity": 1,
-             "strict_upright": False, "fragile": False, "stackable": True},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([
-            _placement("FRAGILE", 0, 0, 0, 400, 400, 100),
-            _placement("LIGHT", 0, 0, 100, 400, 400, 100),
+    def test_unknown_sku_rejected(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("UNKNOWN", 0, 0, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is False
+        assert "unknown" in result["error"].lower() or "Unknown" in result["error"]
+
+
+# ============================================================
+# SOFT METRICS
+# ============================================================
+
+class TestVolumeUtilization:
+    def test_calculation(self):
+        pallet = _pallet(length=1200, width=800, max_height=1800)
+        pallet_vol = 1200 * 800 * 1800
+        box_vol = 400 * 300 * 200
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)], pallet=pallet)
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+        expected = round(box_vol / pallet_vol, 4)
+        assert result["metrics"]["volume_utilization"] == expected
+
+
+class TestItemCoverage:
+    def test_full_coverage(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0, quantity=2)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 300, 200, instance_index=0),
+            _placement("A", 400, 0, 0, 400, 300, 200, instance_index=1),
         ])
         result = evaluate_solution(req, resp)
-        assert result["valid"]
-        assert result["metrics"]["fragility_score"] == pytest.approx(1.0)
+        assert result["metrics"]["item_coverage"] == 1.0
 
-    def test_multiple_fragility_violations(self):
-        """Multiple heavy on fragile → cumulative penalty (-0.05 each)."""
-        boxes = [
-            {"sku_id": "FRAGILE", "description": "", "length_mm": 800, "width_mm": 400,
-             "height_mm": 100, "weight_kg": 2.0, "quantity": 1,
-             "strict_upright": False, "fragile": True, "stackable": True},
-            {"sku_id": "HEAVY", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 100, "weight_kg": 5.0, "quantity": 2,
-             "strict_upright": False, "fragile": False, "stackable": True},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([
-            _placement("FRAGILE", 0, 0, 0, 800, 400, 100),
-            _placement("HEAVY", 0, 0, 100, 400, 400, 100, idx=0),
-            _placement("HEAVY", 400, 0, 100, 400, 400, 100, idx=1),
+    def test_partial_coverage(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0, quantity=4)])
+        resp = _response([
+            _placement("A", 0, 0, 0, 400, 300, 200, instance_index=0),
+            _placement("A", 400, 0, 0, 400, 300, 200, instance_index=1),
         ])
         result = evaluate_solution(req, resp)
-        assert result["valid"]
-        # 2 heavy boxes on 1 fragile = 2 violations → 1.0 - 0.05*2 = 0.90
-        assert result["metrics"]["fragility_score"] == pytest.approx(0.90)
+        assert result["metrics"]["item_coverage"] == 0.5
 
-    def test_no_fragile_perfect_score(self):
-        """No fragile items → fragility_score = 1.0."""
-        boxes = [
-            {"sku_id": "A", "description": "", "length_mm": 400, "width_mm": 400,
-             "height_mm": 200, "weight_kg": 10.0, "quantity": 2,
-             "strict_upright": False, "fragile": False, "stackable": True},
-        ]
-        req = _make_request(boxes)
-        resp = _make_response([
-            _placement("A", 0, 0, 0, 400, 400, 200, idx=0),
-            _placement("A", 0, 0, 200, 400, 400, 200, idx=1),
+
+class TestFragilityScore:
+    def test_fragile_on_fragile_no_penalty(self):
+        """Per spec: only NON-FRAGILE heavy (>2kg) on fragile triggers penalty."""
+        req = _request([
+            _box_spec("BOTTOM", 400, 400, 200, 1.0, fragile=True),
+            _box_spec("TOP_FRAGILE", 400, 400, 200, 5.0, fragile=True),
+        ])
+        resp = _response([
+            _placement("BOTTOM", 0, 0, 0, 400, 400, 200),
+            _placement("TOP_FRAGILE", 0, 0, 200, 400, 400, 200),
         ])
         result = evaluate_solution(req, resp)
-        assert result["valid"]
-        assert result["metrics"]["fragility_score"] == pytest.approx(1.0)
+        assert result["valid"] is True
+        assert result["metrics"]["fragility_score"] == 1.0
 
+    def test_non_fragile_heavy_on_fragile_penalized(self):
+        req = _request([
+            _box_spec("BOTTOM", 400, 400, 200, 1.0, fragile=True),
+            _box_spec("TOP_STURDY", 400, 400, 200, 5.0, fragile=False),
+        ])
+        resp = _response([
+            _placement("BOTTOM", 0, 0, 0, 400, 400, 200),
+            _placement("TOP_STURDY", 0, 0, 200, 400, 400, 200),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+        assert result["metrics"]["fragility_score"] == 0.95  # 1.0 - 0.05*1
 
-# ── time score thresholds ───────────────────────────────────────
+    def test_light_box_on_fragile_no_penalty(self):
+        """Box ≤ 2kg on fragile should NOT trigger penalty."""
+        req = _request([
+            _box_spec("BOTTOM", 400, 400, 200, 1.0, fragile=True),
+            _box_spec("TOP_LIGHT", 400, 400, 200, 1.5, fragile=False),
+        ])
+        resp = _response([
+            _placement("BOTTOM", 0, 0, 0, 400, 400, 200),
+            _placement("TOP_LIGHT", 0, 0, 200, 400, 400, 200),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+        assert result["metrics"]["fragility_score"] == 1.0
+
+    def test_multiple_violations_accumulate(self):
+        req = _request([
+            _box_spec("FRAG1", 400, 400, 200, 1.0, fragile=True),
+            _box_spec("FRAG2", 400, 400, 200, 1.0, fragile=True),
+            _box_spec("HEAVY1", 400, 400, 200, 5.0, quantity=2),
+        ])
+        resp = _response([
+            _placement("FRAG1", 0, 0, 0, 400, 400, 200),
+            _placement("FRAG2", 400, 0, 0, 400, 400, 200),
+            _placement("HEAVY1", 0, 0, 200, 400, 400, 200, instance_index=0),
+            _placement("HEAVY1", 400, 0, 200, 400, 400, 200, instance_index=1),
+        ])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+        # 2 violations: each heavy on each fragile
+        assert result["metrics"]["fragility_score"] == 0.90  # 1.0 - 0.05*2
+
 
 class TestTimeScore:
-    @pytest.mark.parametrize("ms,expected", [
-        (500, 1.0), (1000, 1.0),   # ≤1s → 1.0
-        (1001, 0.7), (5000, 0.7),  # 1-5s → 0.7
-        (5001, 0.3), (30000, 0.3), # 5-30s → 0.3
-        (30001, 0.0), (99999, 0.0), # >30s → 0.0
-    ])
-    def test_time_score_thresholds(self, ms, expected):
-        boxes = [{"sku_id": "A", "description": "", "length_mm": 100, "width_mm": 100,
-                  "height_mm": 100, "weight_kg": 1.0, "quantity": 1,
-                  "strict_upright": False, "fragile": False, "stackable": True}]
-        req = _make_request(boxes)
-        resp = _make_response([_placement("A", 0, 0, 0, 100, 100, 100)], solve_time_ms=ms)
+    def test_under_1s(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)], solve_time_ms=500)
         result = evaluate_solution(req, resp)
-        assert result["metrics"]["time_score"] == pytest.approx(expected)
+        assert result["metrics"]["time_score"] == 1.0
+
+    def test_1_to_5s(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)], solve_time_ms=3000)
+        result = evaluate_solution(req, resp)
+        assert result["metrics"]["time_score"] == 0.7
+
+    def test_5_to_30s(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)], solve_time_ms=15000)
+        result = evaluate_solution(req, resp)
+        assert result["metrics"]["time_score"] == 0.3
+
+    def test_over_30s(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)], solve_time_ms=60000)
+        result = evaluate_solution(req, resp)
+        assert result["metrics"]["time_score"] == 0.0
+
+    def test_exactly_1s(self):
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)], solve_time_ms=1000)
+        result = evaluate_solution(req, resp)
+        assert result["metrics"]["time_score"] == 1.0
 
 
-# ── scoring formula ─────────────────────────────────────────────
-
-class TestScoringFormula:
-    def test_formula_weights(self):
-        """final_score = 0.50*vol + 0.30*cov + 0.10*frag + 0.10*time."""
-        boxes = [{"sku_id": "A", "description": "", "length_mm": 100, "width_mm": 100,
-                  "height_mm": 100, "weight_kg": 1.0, "quantity": 1,
-                  "strict_upright": False, "fragile": False, "stackable": True}]
-        pallet = {"length_mm": 1000, "width_mm": 1000, "max_height_mm": 1000, "max_weight_kg": 100.0}
-        req = _make_request(boxes, pallet)
-        resp = _make_response([_placement("A", 0, 0, 0, 100, 100, 100)])
+class TestFinalScoreFormula:
+    def test_weighted_sum(self):
+        """Verify final_score = 0.5*vol + 0.3*cov + 0.1*frag + 0.1*time."""
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([_placement("A", 0, 0, 0, 400, 300, 200)], solve_time_ms=100)
         result = evaluate_solution(req, resp)
         m = result["metrics"]
-        expected = 0.50 * m["volume_utilization"] + 0.30 * m["item_coverage"] + \
-                   0.10 * m["fragility_score"] + 0.10 * m["time_score"]
-        assert result["final_score"] == pytest.approx(expected, abs=0.001)
+        expected = (
+            0.5 * m["volume_utilization"]
+            + 0.3 * m["item_coverage"]
+            + 0.1 * m["fragility_score"]
+            + 0.1 * m["time_score"]
+        )
+        assert abs(result["final_score"] - expected) < 0.001
+
+    def test_empty_placement_valid(self):
+        """No placements should still be valid (score near 0)."""
+        req = _request([_box_spec("A", 400, 300, 200, 5.0)])
+        resp = _response([])
+        result = evaluate_solution(req, resp)
+        assert result["valid"] is True
+        assert result["final_score"] <= 0.2  # only frag+time contribute

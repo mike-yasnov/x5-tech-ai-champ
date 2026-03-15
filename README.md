@@ -76,7 +76,7 @@ python -m solver request_random_mixed.json --time-budget 5000
 
 ### Подход
 
-`portfolio_block` сейчас делает не один жадный проход, а короткий runtime-портфель кандидатов:
+Adaptive Portfolio Repacker (`portfolio_block`) сейчас делает не один жадный проход, а короткий runtime-портфель кандидатов:
 
 1. Считает `ScenarioFingerprint` по request.
 2. Ранжирует `seed_family` через fallback-эвристику и optional XGBoost selector.
