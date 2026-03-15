@@ -11,9 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generator import generate_scenario
 from validator import evaluate_solution
-from solver.models import load_request, solution_to_dict, Pallet, Box
-from solver.packer import SORT_KEYS, pack_greedy
-from solver.solver import solve
+from alternative_solver.models import load_request, solution_to_dict, Pallet, Box
+from alternative_solver.packer import SORT_KEYS, pack_greedy
+from alternative_solver.solver import solve
 
 
 SCENARIOS = [

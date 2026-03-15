@@ -2,8 +2,8 @@
 
 import pytest
 
-from solver.models import Pallet
-from solver.pallet_state import PalletState
+from alternative_solver.models import Pallet
+from alternative_solver.pallet_state import PalletState
 
 
 @pytest.fixture

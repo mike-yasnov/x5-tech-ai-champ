@@ -6,10 +6,12 @@ from .pallet_state import PalletState
 logger = logging.getLogger(__name__)
 
 # Tunable weights
-W_HEIGHT = 0.4
-W_CONTACT = 0.3
+W_HEIGHT = 0.32
+W_CONTACT = 0.26
 W_FRAGILITY = 0.2
 W_FILL = 0.1
+W_FOOTPRINT = 0.07
+W_EDGE = 0.05
 
 
 def score_placement(
@@ -18,6 +20,7 @@ def score_placement(
     x: int, y: int, z: int,
     weight_kg: float,
     fragile: bool,
+    strict_fragility: bool = False,
 ) -> float:
     """Score a candidate placement. Higher = better.
 
@@ -41,19 +44,39 @@ def score_placement(
 
     # 3. Fragility penalty: check if we're placing heavy box on fragile ones
     fragility_score = 1.0
-    if weight_kg > 2.0 and z > 0:
+    if weight_kg > 2.0 and not fragile and z > 0:
         fragile_below = state.get_fragile_boxes_at_top(z, x, y, x2, y2)
         if fragile_below:
+            if strict_fragility:
+                return -10.0
             fragility_score = 0.0
 
     # 4. Fill bonus: prefer positions with lower z (fill gaps first)
     fill_score = 1.0 - (z / max_h) if max_h > 0 else 0.0
+
+    # 5. Footprint bonus: larger floor coverage is useful for stable layers
+    pallet_area = max(state.pallet.length_mm * state.pallet.width_mm, 1)
+    footprint_score = (dx * dy) / pallet_area
+
+    # 6. Edge bonus: touching walls/corners tends to produce cleaner packings
+    edge_contacts = 0
+    if x == 0:
+        edge_contacts += 1
+    if y == 0:
+        edge_contacts += 1
+    if x2 == state.pallet.length_mm:
+        edge_contacts += 1
+    if y2 == state.pallet.width_mm:
+        edge_contacts += 1
+    edge_score = min(edge_contacts / 2.0, 1.0)
 
     total = (
         W_HEIGHT * height_score
         + W_CONTACT * contact_score
         + W_FRAGILITY * fragility_score
         + W_FILL * fill_score
+        + W_FOOTPRINT * footprint_score
+        + W_EDGE * edge_score
     )
 
     return total

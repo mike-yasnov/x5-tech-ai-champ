@@ -17,13 +17,13 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-# Distinct colors for different SKUs
+# Brand-aligned palette for 3D visualization on dark background
 SKU_COLORS = [
-    "#4285F4", "#EA4335", "#FBBC04", "#34A853",  # Google palette
-    "#FF6D01", "#46BDC6", "#7BAAF7", "#F07B72",
-    "#FCD04F", "#57BB8A", "#FF8A65", "#4DD0E1",
-    "#9575CD", "#F06292", "#AED581", "#FFD54F",
-    "#A1887F", "#90A4AE", "#CE93D8", "#80CBC4",
+    "#67DB3A", "#CBB7F6", "#EEDCA8", "#BFE8C6",  # Brand green, Lavender, Sand, Mint
+    "#A8F36A", "#E8A0C8", "#8BD4E0", "#D7F4A8",  # Lime, Rose, Teal, Pale lime
+    "#59C436", "#B0A0E8", "#F0C878", "#7ECBA1",  # Stable green, Soft violet, Gold, Sage
+    "#6FEA3A", "#D4C4F0", "#E0B890", "#90D8B8",  # Bright green, Light lavender, Peach, Aqua
+    "#4AAE2A", "#C8B0E0", "#E8D0A0", "#A8E0C8",  # Deep green, Mauve, Cream, Pale mint
 ]
 
 
@@ -120,6 +120,53 @@ def _fragility_violation_bottom_indices(placements: List[Dict[str, Any]]) -> set
     return bottom_indices
 
 
+def build_scenario_viz_data(
+    request_dict: Dict[str, Any],
+    response_dict: Dict[str, Any],
+    scenario_name: str,
+    score: float = 0.0,
+) -> Dict[str, Any]:
+    """Build visualization payload for a single request/response pair."""
+    pallet = dict(request_dict.get("pallet", {}))
+    boxes_meta = {b["sku_id"]: b for b in request_dict.get("boxes", [])}
+
+    placements = []
+    for p in response_dict.get("placements", []):
+        sku = boxes_meta.get(p["sku_id"], {})
+        dim = p["dimensions_placed"]
+        pos = p["position"]
+        placements.append(
+            {
+                "sku_id": p["sku_id"],
+                "x_mm": pos["x_mm"],
+                "y_mm": pos["y_mm"],
+                "z_mm": pos["z_mm"],
+                "length_mm": dim["length_mm"],
+                "width_mm": dim["width_mm"],
+                "height_mm": dim["height_mm"],
+                "fragile": sku.get("fragile", False),
+                "weight_kg": sku.get("weight_kg", 0),
+            }
+        )
+
+    total_items = sum(int(box.get("quantity", 0)) for box in request_dict.get("boxes", []))
+    placed = len(response_dict.get("placements", []))
+    unplaced = response_dict.get("unplaced", [])
+    unplaced_boxes = _layout_unplaced_boxes(unplaced, boxes_meta, pallet)
+
+    return {
+        "pallet": pallet,
+        "placements": placements,
+        "unplaced_boxes": unplaced_boxes,
+        "meta": {
+            "scenario": scenario_name,
+            "score": score,
+            "placed": placed,
+            "total_items": total_items,
+        },
+    }
+
+
 def _generate_html(scenario: Dict[str, Any]) -> str:
     """Generate a standalone HTML file with Three.js 3D visualization."""
     pallet = scenario["pallet"]
@@ -181,55 +228,138 @@ def _generate_html(scenario: Dict[str, Any]) -> str:
 <title>3D Pallet — {scenario_name}</title>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; overflow: hidden; }}
+  body {{
+    font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #171717; color: #EDEDED; overflow: hidden;
+    width: 100vw; height: 100vh;
+  }}
+  #canvas-container {{
+    position: absolute; inset: 0;
+  }}
+  #hud {{
+    position: absolute; inset: 0; pointer-events: none; z-index: 10;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto 1fr auto;
+    padding: 12px;
+    gap: 10px;
+  }}
+  #info, #legend, #slider-wrap {{ pointer-events: auto; }}
   #info {{
-    position: absolute; top: 12px; left: 12px; z-index: 10;
-    background: rgba(0,0,0,0.7); padding: 12px 16px; border-radius: 8px;
-    font-size: 13px; line-height: 1.6; backdrop-filter: blur(8px);
+    grid-column: 1; grid-row: 1;
+    background: rgba(31,31,31,0.88); padding: 12px 16px; border-radius: 16px;
+    font-size: 12px; line-height: 1.6; backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
+    max-width: 280px;
   }}
-  #info h2 {{ font-size: 16px; margin-bottom: 4px; color: #7BAAF7; }}
-  #info .metric {{ color: #aaa; }}
-  #info .value {{ color: #fff; font-weight: 600; }}
+  #info h2 {{ font-size: 14px; margin-bottom: 4px; color: #67DB3A; font-weight: 600; }}
+  #info .metric {{ color: #8E8E8E; }}
+  #info .value {{ color: #EDEDED; font-weight: 600; }}
   #legend {{
-    position: absolute; bottom: 12px; left: 12px; z-index: 10;
-    background: rgba(0,0,0,0.7); padding: 10px 14px; border-radius: 8px;
-    font-size: 12px; max-height: 200px; overflow-y: auto; backdrop-filter: blur(8px);
+    grid-column: 3; grid-row: 1 / 3;
+    align-self: start;
+    background: rgba(31,31,31,0.88); padding: 10px 14px; border-radius: 16px;
+    font-size: 11px; max-height: calc(100vh - 80px); overflow-y: auto; backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
+    max-width: 260px;
   }}
-  #legend .item {{ display: flex; align-items: center; gap: 6px; margin: 2px 0; }}
-  #legend .swatch {{ width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }}
+  #legend .title {{ color: #8E8E8E; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }}
+  #legend .item {{ display: flex; align-items: center; gap: 6px; margin: 2px 0; line-height: 1.5; color: #BDBDBD; }}
+  #legend .swatch {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
   #tooltip {{
     position: absolute; display: none; z-index: 20;
-    background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 6px;
+    background: rgba(31,31,31,0.94); padding: 10px 14px; border-radius: 12px;
     font-size: 12px; pointer-events: none; white-space: nowrap;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(12px);
+    color: #EDEDED;
   }}
   #slider-wrap {{
-    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
-    background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px;
-    display: flex; align-items: center; gap: 12px; backdrop-filter: blur(8px);
+    grid-column: 1 / 4; grid-row: 3;
+    justify-self: center;
+    background: rgba(31,31,31,0.88); padding: 10px 20px; border-radius: 16px;
+    display: flex; align-items: center; gap: 12px; backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
   }}
-  #slider-wrap label {{ color: #aaa; font-size: 12px; white-space: nowrap; }}
-  #slider-wrap input[type="range"] {{ width: 200px; accent-color: #7BAAF7; }}
-  #slider-wrap .step-value {{ color: #fff; font-weight: 600; min-width: 4ch; }}
+  #slider-wrap label {{ color: #8E8E8E; font-size: 12px; white-space: nowrap; }}
+  #slider-wrap input[type="range"] {{ width: 240px; accent-color: #67DB3A; }}
+  #slider-wrap .step-value {{ color: #EDEDED; font-weight: 600; min-width: 6ch; font-size: 12px; }}
   canvas {{ display: block; }}
+
+  /* ── Mobile Responsive ─────────────────────────── */
+  @media (max-width: 768px) {{
+    #hud {{
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+      padding: 8px;
+      gap: 6px;
+    }}
+    #info {{
+      grid-column: 1; grid-row: 1;
+      max-width: 100%;
+      font-size: 11px;
+      padding: 8px 12px;
+      border-radius: 12px;
+    }}
+    #info h2 {{ font-size: 12px; }}
+    #legend {{
+      grid-column: 1; grid-row: auto;
+      position: fixed;
+      bottom: 60px;
+      right: 8px;
+      max-width: 180px;
+      max-height: 40vh;
+      font-size: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      opacity: 0.85;
+    }}
+    #slider-wrap {{
+      grid-column: 1;
+      padding: 8px 12px;
+      border-radius: 12px;
+      gap: 8px;
+    }}
+    #slider-wrap input[type="range"] {{ width: 160px; }}
+    #slider-wrap label {{ font-size: 11px; }}
+    #tooltip {{ font-size: 11px; }}
+  }}
+
+  @media (max-width: 480px) {{
+    #info {{ padding: 6px 10px; }}
+    #info h2 {{ font-size: 11px; }}
+    #legend {{ max-width: 150px; font-size: 9px; bottom: 52px; }}
+    #slider-wrap input[type="range"] {{ width: 120px; }}
+  }}
 </style>
 </head>
 <body>
 
-<div id="info">
-  <h2>{scenario_name}</h2>
-  <span class="metric">Score:</span> <span class="value">{score:.4f}</span><br>
-  <span class="metric">Placed:</span> <span class="value">{placed}/{total}</span><br>
-  <span class="metric">Unplaced:</span> <span class="value">{unplaced_count}</span> <span class="metric">(shown to the right)</span><br>
-  <span class="metric">Controls:</span> <span class="metric">drag to rotate, scroll to zoom</span>
+<div id="canvas-container"></div>
+
+<div id="hud">
+  <div id="info">
+    <h2>{scenario_name}</h2>
+    <span class="metric">Score:</span> <span class="value">{score:.4f}</span><br>
+    <span class="metric">Placed:</span> <span class="value">{placed}/{total}</span><br>
+    <span class="metric">Unplaced:</span> <span class="value">{unplaced_count}</span> <span class="metric">(справа)</span><br>
+  </div>
+
+  <div></div><!-- grid spacer -->
+
+  <div id="legend"></div>
+
+  <div></div><!-- grid spacer row 2 col 1 -->
+  <div></div><!-- grid spacer row 2 col 2 -->
+
+  <div id="slider-wrap">
+    <label for="step-slider">Шаг укладки:</label>
+    <input type="range" id="step-slider" min="0" max="1" value="1" step="1">
+    <span class="step-value" id="step-value">0 / 0</span>
+  </div>
 </div>
 
-<div id="legend"></div>
 <div id="tooltip"></div>
-<div id="slider-wrap">
-  <label for="step-slider">Шаг укладки:</label>
-  <input type="range" id="step-slider" min="0" max="1" value="1" step="1">
-  <span class="step-value" id="step-value">0 / 0</span>
-</div>
 
 <script type="importmap">
 {{
@@ -253,7 +383,7 @@ const S = 1 / 1000;
 
 // Scene
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
+scene.background = new THREE.Color(0x171717);
 
 // Camera: if unplaced exist, frame both pallet and unplaced zone
 const cx = PALLET.dx * S / 2, cy = PALLET.dy * S / 2, cz = PALLET.dz * S / 2;
@@ -270,7 +400,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-document.body.appendChild(renderer.domElement);
+document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 // Controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -293,7 +423,7 @@ scene.add(fillLight);
 
 // Ground plane
 const groundGeo = new THREE.PlaneGeometry(maxDim * 4, maxDim * 4);
-const groundMat = new THREE.MeshStandardMaterial({{ color: 0x16213e, roughness: 0.9 }});
+const groundMat = new THREE.MeshStandardMaterial({{ color: 0x1F1F1F, roughness: 0.9 }});
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.set(cx, -0.001, cz);
@@ -301,24 +431,78 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // Grid
-const grid = new THREE.GridHelper(maxDim * 3, 30, 0x334466, 0x1a2a44);
+const grid = new THREE.GridHelper(maxDim * 3, 30, 0x2A2A2A, 0x1F1F1F);
 grid.position.set(cx, 0, cz);
 scene.add(grid);
 
-// Pallet base (wireframe)
-const palletGeo = new THREE.BoxGeometry(PALLET.dx * S, 0.005, PALLET.dz * S);
-const palletMat = new THREE.MeshStandardMaterial({{
-  color: 0x8B7355, roughness: 0.8, metalness: 0.1
+// 3D Pallet — realistic wooden pallet with deck boards, stringers, bottom boards
+const palletGroup = new THREE.Group();
+const pL = PALLET.dx * S;  // pallet length (X)
+const pW = PALLET.dz * S;  // pallet width (Z)
+const boardH = 0.018 * S * 1000;   // board thickness ~18mm
+const stringerH = 0.078 * S * 1000; // stringer height ~78mm
+const stringerW = 0.090 * S * 1000; // stringer width ~90mm
+const palletTotalH = boardH * 2 + stringerH; // total pallet height
+const woodMat = new THREE.MeshStandardMaterial({{
+  color: 0x8B7355, roughness: 0.85, metalness: 0.02
 }});
-const palletMesh = new THREE.Mesh(palletGeo, palletMat);
-palletMesh.position.set(cx, -0.0025, cz);
-palletMesh.receiveShadow = true;
-scene.add(palletMesh);
+const woodDarkMat = new THREE.MeshStandardMaterial({{
+  color: 0x6B5740, roughness: 0.9, metalness: 0.02
+}});
+const woodEdgeMat = new THREE.LineBasicMaterial({{ color: 0x5A4A35, transparent: true, opacity: 0.5 }});
 
-// Pallet height limit (wireframe)
+function addBoard(w, h, d, x, y, z, mat) {{
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  palletGroup.add(mesh);
+  const edges = new THREE.EdgesGeometry(geo);
+  const line = new THREE.LineSegments(edges, woodEdgeMat);
+  line.position.copy(mesh.position);
+  palletGroup.add(line);
+}}
+
+// Top deck boards (7 boards across width)
+const deckCount = 7;
+const deckBoardW = pW / deckCount * 0.85;
+const deckGap = (pW - deckBoardW * deckCount) / (deckCount - 1);
+const topY = -boardH / 2;
+for (let i = 0; i < deckCount; i++) {{
+  const zPos = deckBoardW / 2 + i * (deckBoardW + deckGap);
+  addBoard(pL, boardH, deckBoardW, pL / 2, topY, zPos, woodMat);
+}}
+
+// 3 stringers (along length)
+const stringerPositions = [stringerW / 2, pW / 2, pW - stringerW / 2];
+const stringerY = -(boardH + stringerH / 2);
+for (const zPos of stringerPositions) {{
+  addBoard(pL, stringerH, stringerW, pL / 2, stringerY, zPos, woodDarkMat);
+}}
+
+// Bottom boards (3 boards across length)
+const bottomY = -(boardH + stringerH + boardH / 2);
+const bottomCount = 3;
+const bottomBoardL = pL / bottomCount * 0.85;
+const bottomGap = (pL - bottomBoardL * bottomCount) / (bottomCount - 1);
+for (let i = 0; i < bottomCount; i++) {{
+  const xPos = bottomBoardL / 2 + i * (bottomBoardL + bottomGap);
+  addBoard(bottomBoardL, boardH, pW, xPos, bottomY, pW / 2, woodMat);
+}}
+
+// Shift pallet so top surface aligns with y=0 (where boxes are placed)
+// No shift needed — pallet extends below y=0 which is correct
+scene.add(palletGroup);
+
+// Adjust ground and grid down to sit below pallet
+ground.position.y = bottomY - boardH / 2 - 0.001;
+grid.position.y = bottomY - boardH / 2;
+
+// Pallet height limit (wireframe) — offset up by pallet height so boxes sit on top
 const limitGeo = new THREE.BoxGeometry(PALLET.dx * S, PALLET.dy * S, PALLET.dz * S);
 const limitEdges = new THREE.EdgesGeometry(limitGeo);
-const limitLine = new THREE.LineSegments(limitEdges, new THREE.LineBasicMaterial({{ color: 0x445566, transparent: true, opacity: 0.4 }}));
+const limitLine = new THREE.LineSegments(limitEdges, new THREE.LineBasicMaterial({{ color: 0x2A2A2A, transparent: true, opacity: 0.25 }}));
 limitLine.position.set(cx, cy, cz);
 scene.add(limitLine);
 
@@ -348,7 +532,7 @@ BOXES.forEach((box, i) => {{
   scene.add(mesh);
 
   const edges = new THREE.EdgesGeometry(geo);
-  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x000000, transparent: true, opacity: 0.3 }}));
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x111111, transparent: true, opacity: 0.4 }}));
   line.position.copy(mesh.position);
   scene.add(line);
 
@@ -356,7 +540,7 @@ BOXES.forEach((box, i) => {{
   const cx = (box.x + box.dx / 2) * S;
   const cyTop = (box.y + box.dy) * S + 0.005;
   const cz = (box.z + box.dz / 2) * S;
-  const markerMat = new THREE.MeshStandardMaterial({{ color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 0.6 }});
+  const markerMat = new THREE.MeshStandardMaterial({{ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 0.7 }});
   if (box.fragility_violation_bottom) {{
     const r = Math.min(box.dx, box.dz) * S * 0.2;
     const t = r * 0.2;
@@ -396,7 +580,7 @@ UNPLACED_BOXES.forEach((box, i) => {{
   mesh.receiveShadow = true;
   scene.add(mesh);
   const edges = new THREE.EdgesGeometry(geo);
-  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x666666, transparent: true, opacity: 0.4 }}));
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({{ color: 0x333333, transparent: true, opacity: 0.35 }}));
   line.position.copy(mesh.position);
   scene.add(line);
   boxMeshes.push(mesh);
@@ -405,6 +589,10 @@ UNPLACED_BOXES.forEach((box, i) => {{
 
 // Legend
 const legend = document.getElementById('legend');
+const titleEl = document.createElement('div');
+titleEl.className = 'title';
+titleEl.textContent = 'SKU Legend';
+legend.appendChild(titleEl);
 const skuSet = new Map();
 [...BOXES, ...UNPLACED_BOXES].forEach(b => {{
   if (!skuSet.has(b.sku_id)) {{
@@ -416,7 +604,7 @@ const skuSet = new Map();
 skuSet.forEach((v, sku) => {{
   const item = document.createElement('div');
   item.className = 'item';
-  const label = v.unplaced > 0 ? `${{sku}} (placed: ${{v.placed}}, unplaced: ${{v.unplaced}})` : `${{sku}} (${{v.placed}})`;
+  const label = v.unplaced > 0 ? `${{sku}} (${{v.placed}}+${{v.unplaced}})` : `${{sku}} (${{v.placed}})`;
   item.innerHTML = `<div class="swatch" style="background:${{v.color}}"></div>${{label}}`;
   legend.appendChild(item);
 }});
@@ -443,6 +631,19 @@ function updateStepVisibility(step) {{
 stepSlider.addEventListener('input', () => updateStepVisibility(parseInt(stepSlider.value, 10)));
 if (totalPlaced === 0) {{
   document.getElementById('slider-wrap').style.display = 'none';
+}} else {{
+  updateStepVisibility(0);
+  const targetFrames = 42;
+  const stepAdvance = Math.max(1, Math.ceil(totalPlaced / targetFrames));
+  let currentStep = 0;
+  const autoplay = window.setInterval(() => {{
+    currentStep = Math.min(totalPlaced, currentStep + stepAdvance);
+    stepSlider.value = currentStep;
+    updateStepVisibility(currentStep);
+    if (currentStep >= totalPlaced) {{
+      window.clearInterval(autoplay);
+    }}
+  }}, 26);
 }}
 
 // Tooltip on hover
@@ -488,6 +689,11 @@ animate();
 </html>"""
 
 
+def generate_scenario_html(scenario: Dict[str, Any]) -> str:
+    """Public wrapper for generating standalone visualization HTML."""
+    return _generate_html(scenario)
+
+
 def generate_viz_data(benchmark_results: List[Dict], requests: List[Dict]) -> List[Dict]:
     """Build visualization data from benchmark results and original requests.
 
@@ -497,39 +703,14 @@ def generate_viz_data(benchmark_results: List[Dict], requests: List[Dict]) -> Li
     """
     viz_data = []
     for result, request in zip(benchmark_results, requests):
-        pallet = request["pallet"]
-        boxes_meta = {b["sku_id"]: b for b in request["boxes"]}
-
-        placements = []
-        for p in result.get("response", {}).get("placements", []):
-            sku = boxes_meta.get(p["sku_id"], {})
-            dim = p["dimensions_placed"]
-            pos = p["position"]
-            placements.append({
-                "sku_id": p["sku_id"],
-                "x_mm": pos["x_mm"],
-                "y_mm": pos["y_mm"],
-                "z_mm": pos["z_mm"],
-                "length_mm": dim["length_mm"],
-                "width_mm": dim["width_mm"],
-                "height_mm": dim["height_mm"],
-                "fragile": sku.get("fragile", False),
-                "weight_kg": sku.get("weight_kg", 0),
-            })
-
-        unplaced = result.get("response", {}).get("unplaced", [])
-        unplaced_boxes = _layout_unplaced_boxes(unplaced, boxes_meta, pallet)
-        viz_data.append({
-            "pallet": pallet,
-            "placements": placements,
-            "unplaced_boxes": unplaced_boxes,
-            "meta": {
-                "scenario": result["scenario"],
-                "score": result.get("final_score", 0),
-                "placed": result.get("placed", len(placements)),
-                "total_items": result.get("total_items", 0),
-            },
-        })
+        viz_data.append(
+            build_scenario_viz_data(
+                request_dict=request,
+                response_dict=result.get("response", {}),
+                scenario_name=result["scenario"],
+                score=result.get("final_score", 0),
+            )
+        )
 
     return viz_data
 

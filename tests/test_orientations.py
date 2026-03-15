@@ -1,7 +1,7 @@
 """Tests for solver.orientations."""
 
-from solver.models import Box
-from solver.orientations import get_orientations
+from alternative_solver.models import Box
+from alternative_solver.orientations import get_orientations
 
 
 def test_regular_box_6_orientations():

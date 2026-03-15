@@ -1,7 +1,7 @@
 """Tests for solver.packer."""
 
-from solver.models import Box, Pallet
-from solver.packer import pack_greedy, SORT_KEYS
+from alternative_solver.models import Box, Pallet
+from alternative_solver.packer import pack_greedy, SORT_KEYS
 
 
 def _simple_pallet():
