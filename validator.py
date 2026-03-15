@@ -1,11 +1,13 @@
 import json
 from typing import Dict, Any, List
 
+
 def calc_overlap_2d(b1: Dict[str, Any], b2: Dict[str, Any]) -> float:
     """Площадь пересечения проекций на XY."""
     dx = max(0, min(b1["x_max"], b2["x_max"]) - max(b1["x_min"], b2["x_min"]))
     dy = max(0, min(b1["y_max"], b2["y_max"]) - max(b1["y_min"], b2["y_min"]))
     return dx * dy
+
 
 def check_3d_collision(b1: Dict[str, Any], b2: Dict[str, Any]) -> bool:
     """AABB-коллизия: строгое пересечение по всем осям."""
@@ -13,6 +15,7 @@ def check_3d_collision(b1: Dict[str, Any], b2: Dict[str, Any]) -> bool:
     oy = max(0, min(b1["y_max"], b2["y_max"]) - max(b1["y_min"], b2["y_min"]))
     oz = max(0, min(b1["z_max"], b2["z_max"]) - max(b1["z_min"], b2["z_min"]))
     return ox > 0 and oy > 0 and oz > 0
+
 
 def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
     pallet = request["pallet"]
@@ -34,17 +37,18 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
         dim = p["dimensions_placed"]
         pos = p["position"]
 
+        # Валидация rotation_code
+        VALID_ROTATION_CODES = {"LWH", "LHW", "WLH", "WHL", "HLW", "HWL"}
+        rot_code = p.get("rotation_code", "")
+        if rot_code not in VALID_ROTATION_CODES:
+            return {
+                "valid": False,
+                "error": f"Invalid rotation_code '{rot_code}' for {sku_id}. Must be one of: {sorted(VALID_ROTATION_CODES)}",
+            }
+
         # Anti-cheat: проверка, что габариты — это перестановка исходных габаритов
-        orig_dims_sorted = sorted([
-            sku["length_mm"],
-            sku["width_mm"],
-            sku["height_mm"]
-        ])
-        placed_dims_sorted = sorted([
-            dim["length_mm"],
-            dim["width_mm"],
-            dim["height_mm"]
-        ])
+        orig_dims_sorted = sorted([sku["length_mm"], sku["width_mm"], sku["height_mm"]])
+        placed_dims_sorted = sorted([dim["length_mm"], dim["width_mm"], dim["height_mm"]])
         if orig_dims_sorted != placed_dims_sorted:
             return {
                 "valid": False,
@@ -77,9 +81,12 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
             "stackable": sku.get("stackable", True),
             "strict_upright": sku["strict_upright"],
             "orig_height": sku["height_mm"],
-            "x_min": x_min, "x_max": x_max,
-            "y_min": y_min, "y_max": y_max,
-            "z_min": z_min, "z_max": z_max,
+            "x_min": x_min,
+            "x_max": x_max,
+            "y_min": y_min,
+            "y_max": y_max,
+            "z_min": z_min,
+            "z_max": z_max,
             "area": dim["length_mm"] * dim["width_mm"],
             "volume": dim["length_mm"] * dim["width_mm"] * dim["height_mm"],
         }
@@ -142,16 +149,18 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
                     "error": f"Box {b1['sku_id']} has insufficient support ({support_area:.1f}/{b1['area']:.1f}).",
                 }
 
-        # 6) Stackable constraint
-        if not b1["stackable"]:
-            for b2 in placements:
-                if b1 is b2:
-                    continue
-                if abs(b1["z_max"] - b2["z_min"]) < 1e-6 and calc_overlap_2d(b1, b2) > 0:
-                    return {
-                        "valid": False,
-                        "error": f"Box {b2['sku_id']} placed on top of non-stackable {b1['sku_id']}.",
-                    }
+    # 6) Stackable: stackable=false → ничего нельзя ставить поверх
+    for bottom in placements:
+        if bottom["stackable"]:
+            continue
+        for top in placements:
+            if top is bottom:
+                continue
+            if abs(top["z_min"] - bottom["z_max"]) < 1e-6 and calc_overlap_2d(top, bottom) > 0:
+                return {
+                    "valid": False,
+                    "error": (f"Box {top['sku_id']} placed on non-stackable {bottom['sku_id']}."),
+                }
 
     # ---------------------------
     # SOFT metrics
@@ -166,12 +175,14 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
     item_coverage = placed_items / total_requested_items if total_requested_items > 0 else 0.0
 
     # Fragility penalty
+    # Per task spec: fragile=true means "нельзя ставить под не-хрупкий груз тяжелее 2 кг"
+    # So fragile-on-fragile is NOT a violation, only non-fragile heavy on fragile counts
     fragility_violations = 0
     for top in placements:
         if top["weight"] <= 2.0:
             continue
         if top["fragile"]:
-            continue
+            continue  # fragile-on-fragile is allowed per task definition
         for bottom in placements:
             if not bottom["fragile"]:
                 continue
@@ -191,12 +202,22 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
     else:
         time_score = 0.0
 
-    final_score = (
-        0.50 * vol_util
-        + 0.30 * item_coverage
-        + 0.10 * fragility_score
-        + 0.10 * time_score
-    )
+    final_score = 0.50 * vol_util + 0.30 * item_coverage + 0.10 * fragility_score + 0.10 * time_score
+
+    # Constraint compliance summary
+    has_fragile = any(b["fragile"] for b in placements)
+    has_upright = any(b["strict_upright"] for b in placements)
+    has_non_stackable = any(not b["stackable"] for b in placements)
+
+    constraint_checks = {
+        "bounds": True,
+        "no_collision": True,
+        "support_60pct": True,
+        "weight_limit": True,
+        "strict_upright": "pass" if has_upright else "n/a",
+        "stackable": "pass" if has_non_stackable else "n/a",
+        "fragility_violations": fragility_violations,
+    }
 
     return {
         "valid": True,
@@ -206,8 +227,10 @@ def evaluate_solution(request: Dict[str, Any], response: Dict[str, Any]) -> Dict
             "fragility_score": round(fragility_score, 4),
             "time_score": round(time_score, 4),
         },
+        "constraint_checks": constraint_checks,
         "final_score": round(final_score, 4),
     }
+
 
 # ============================
 # Пример использования
