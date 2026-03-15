@@ -76,7 +76,7 @@ def _fast_score(pallet: Pallet, boxes: List[Box], solution: Solution) -> float:
 def _evaluate_score(request_dict: dict, solution: Solution) -> Optional[float]:
     """Try to evaluate solution using validator. Returns final_score or None."""
     try:
-        from validator import evaluate_solution
+        from core.validator import evaluate_solution
         response_dict = solution_to_dict(solution)
         result = evaluate_solution(request_dict, response_dict)
         if result.get("valid"):

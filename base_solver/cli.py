@@ -95,7 +95,7 @@ def main():
 
         # Print score if validator available
         try:
-            from validator import evaluate_solution
+            from core.validator import evaluate_solution
             eval_result = evaluate_solution(request_dict, result)
             if eval_result.get("valid"):
                 metrics = eval_result.get("metrics", {})

@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Sequence
 
-from generator import generate_scenario
-from validator import evaluate_solution
+from core.generator import generate_scenario
+from core.validator import evaluate_solution
 
 
 QUALITY_WEIGHTS = {

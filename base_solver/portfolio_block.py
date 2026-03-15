@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
-from validator import evaluate_solution
+from core.validator import evaluate_solution
 
 from .block_features import BlockFeatureExtractor, BlockFeatureView
 from .block_ranker import BlockRanker, normalize_scores

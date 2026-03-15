@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 
-from generator import generate_scenario
+from core.generator import generate_scenario
 from base_solver.portfolio_block import _finalize_run, _format_output, _init_common_components, _run_seed_family
 from base_solver.scenario_selector import SEED_FAMILIES, compute_request_fingerprint, seed_family_index
-from validator import evaluate_solution
+from core.validator import evaluate_solution
 
 
 DEFAULT_FAMILIES = [

@@ -27,23 +27,24 @@
 
 ### Структура проекта
 
-- `base_solver/` - базовый production solver: Portfolio-Block Hybrid, CLI и runtime-стратегии
-- `alternative_solver/` - альтернативный solver: multi-restart EP + LNS, свои greedy/beam/layer режимы
-- `tests/` - unit и integration tests; `tests/test_solver.py` прогоняет общие сценарии для обоих solvers
-- `tools/` - benchmark/reporting utilities, вынесенные из корня (`benchmark_methods`, `compare_benchmarks`, `benchmark_utils`)
+- `base_solver/` - базовый solver: Portfolio-Block Hybrid, публичный API, CLI и runtime-стратегии
+- `alternative_solver/` - альтернативный solver: multi-restart EP + LNS и набор greedy/beam/layer packer-ов
+- `core/` - общие модули проекта: генератор сценариев, валидаторы, визуализация, scenario catalog, experiment service
+- `scripts/` - исполняемые entrypoint-ы: benchmark, webapp, training/evaluation/data collection
+- `tools/` - benchmark/reporting utilities для сравнения методов и regression-check отчетов
+- `tests/` - unit и integration tests; `tests/test_solver.py` прогоняет общие сценарии для обоих solver-ов
 - `models/` - обученные selector/ranker модели
 - `docs/` - описание решения, hard scenarios и заметки по разработке
 
-Ключевые entrypoints в корне:
+После реорганизации корень репозитория оставлен только для основных пакетов и конфигурации; служебные AI-артефакты вроде `.claude/` из репозитория удалены.
 
-- `benchmark.py` - основной benchmark для сравнения `base_solver` и `alternative_solver`
-- `benchmark_strategies.py` - сравнение стратегий внутри solver-пайплайна
-- `generator.py` - генератор request-сценариев
-- `validator.py` - рабочий валидатор решений
-- `validator_org.py` - оригинальная версия валидатора организаторов
-- `visualize.py` - генерация 3D HTML-визуализаций
-- `webapp.py` - web UI на NiceGUI/FastAPI
-- `experiment_service.py` - backend-слой для web UI и сценариев экспериментов
+Основные module entrypoints:
+
+- `python -m scripts.benchmark` - основной benchmark для сравнения `base_solver` и `alternative_solver`
+- `python -m scripts.benchmark_strategies` - сравнение greedy-стратегий альтернативного solver-а
+- `python -m scripts.webapp` - web UI на NiceGUI/FastAPI
+- `python -m core.generator` - генерация локальных request-сценариев
+- `python -m core.visualize` - генерация 3D HTML-визуализаций
 
 ## Быстрый старт
 
@@ -56,7 +57,7 @@ cd x5-tech-ai-champ
 pip install -r requirements.txt
 
 # Сгенерировать локальные примеры request_*.json
-python generator.py
+python -m core.generator
 
 # Решить один request (base_solver)
 python -m base_solver request_heavy_water.json -o response.json
@@ -68,17 +69,17 @@ python -m alternative_solver request_heavy_water.json -o response.json
 pytest tests/ -v
 
 # Основной benchmark (оба солвера)
-python benchmark.py
+python -m scripts.benchmark
 
 # Benchmark только одного solver
-python benchmark.py --solver base
-python benchmark.py --solver alternative
+python -m scripts.benchmark --solver base
+python -m scripts.benchmark --solver alternative
 
 # Сравнение solver-методов и greedy-стратегий
 python -m tools.benchmark_methods --methods solver:base solver:alternative
 
 # Веб-лаборатория
-python webapp.py
+python -m scripts.webapp
 ```
 
 После запуска web UI откройте `http://127.0.0.1:3030/`.
@@ -93,6 +94,10 @@ python -m base_solver <input.json> [options]
 
 # alternative_solver
 python -m alternative_solver <input.json> [options]
+
+# shared scripts
+python -m scripts.benchmark [options]
+python -m scripts.webapp
 ```
 
 ### Примеры
@@ -155,20 +160,30 @@ python -m tools.benchmark_methods --scenario-set smoke --limit 10
 
 ```bash
 # Оба солвера
-python benchmark.py
+python -m scripts.benchmark
 
 # Один солвер
-python benchmark.py --solver base
-python benchmark.py --solver alternative
+python -m scripts.benchmark --solver base
+python -m scripts.benchmark --solver alternative
 
 # С визуализацией
-python benchmark.py --viz viz_output/
+python -m scripts.benchmark --viz viz_output/
 
 # Больше restarts
-python benchmark.py --restarts 30
+python -m scripts.benchmark --restarts 30
 ```
 
 Benchmark прогоняет 9 сценариев (4 organizer + 5 diagnostic) и выводит сравнительную таблицу с метриками: volume utilization, item coverage, fragility score, time score.
+
+Смежные скрипты:
+
+```bash
+# Сравнение стратегий альтернативного solver-а
+python -m scripts.benchmark_strategies --limit 8
+
+# Stress benchmark по ограничениям
+python -m scripts.benchmark_constraints --output constraints_report.json
+```
 
 Для сравнения benchmark-отчетов между ветками:
 
@@ -221,6 +236,6 @@ final_score = 0.50 * volume_utilization
 - История экспериментов с возможностью клонирования и сравнения
 
 ```bash
-python webapp.py
+python -m scripts.webapp
 # → http://127.0.0.1:3030/
 ```

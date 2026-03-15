@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from generator import generate_scenario
+from core.generator import generate_scenario
 from base_solver.portfolio_block import collect_ranker_rows
 
 

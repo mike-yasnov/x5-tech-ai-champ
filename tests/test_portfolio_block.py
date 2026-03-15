@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from generator import generate_scenario
+from core.generator import generate_scenario
 from base_solver.hybrid.candidate_gen import RemainingItem
 from base_solver.hybrid.feasibility import FeasibilityChecker
 from base_solver.hybrid.geometry import AABB
@@ -28,7 +28,7 @@ from base_solver.portfolio_block import (
 )
 from base_solver.scenario_selector import compute_request_fingerprint
 from base_solver.solver import solve
-from validator import evaluate_solution
+from core.validator import evaluate_solution
 
 
 def _request_to_models(request_dict: dict):

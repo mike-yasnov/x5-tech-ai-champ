@@ -4,7 +4,7 @@ Each scenario is hand-crafted with a known optimal or expected outcome so that
 we can assert the solver handles the constraint correctly.
 
 Usage:
-    python benchmark_constraints.py [--strategy portfolio_block] [--output results.json]
+    python -m scripts.benchmark_constraints [--strategy portfolio_block] [--output results.json]
 """
 
 import argparse
@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from alternative_solver.models import Pallet, Box, solution_to_dict
 from alternative_solver.solver import solve
-from validator import evaluate_solution
+from core.validator import evaluate_solution
 
 
 # ---------------------------------------------------------------------------

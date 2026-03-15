@@ -1,9 +1,9 @@
 """Benchmark: run both solvers on all scenarios and compare scores.
 
 Usage:
-    python benchmark.py [--restarts N] [--output results.json] [--viz DIR]
-    python benchmark.py --solver base       # run only base_solver
-    python benchmark.py --solver alternative # run only alternative_solver
+    python -m scripts.benchmark [--restarts N] [--output results.json] [--viz DIR]
+    python -m scripts.benchmark --solver base       # run only base_solver
+    python -m scripts.benchmark --solver alternative # run only alternative_solver
 """
 
 import argparse
@@ -11,8 +11,8 @@ import json
 import os
 import time
 
-from generator import generate_scenario
-from validator import evaluate_solution
+from core.generator import generate_scenario
+from core.validator import evaluate_solution
 
 # Import both solvers under distinct names
 from base_solver.models import Pallet as BasePallet, Box as BaseBox, solution_to_dict as base_solution_to_dict
@@ -379,7 +379,7 @@ def main():
         print(f"\nDetailed results saved to {args.output}")
 
     if args.viz:
-        from visualize import generate_html_files
+        from core.visualize import generate_html_files
 
         viz_data = build_viz_data(results)
         viz_json_path = os.path.join(args.viz, "benchmark_viz.json")

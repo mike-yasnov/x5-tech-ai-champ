@@ -4,10 +4,10 @@ import argparse
 import json
 from typing import Any, Dict, List
 
-from generator import generate_scenario
+from core.generator import generate_scenario
 from alternative_solver.models import Box, Pallet, solution_to_dict
 from alternative_solver.packer import SORT_KEYS, pack_greedy
-from validator import evaluate_solution
+from core.validator import evaluate_solution
 
 
 SCENARIOS = [

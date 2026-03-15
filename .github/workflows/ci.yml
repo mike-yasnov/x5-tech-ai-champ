@@ -86,7 +86,7 @@ jobs:
       - name: Run benchmark
         id: bench
         run: |
-          python benchmark.py --output benchmark_results.json --viz viz 2>/dev/null | tee benchmark_output.md
+          python -m scripts.benchmark --output benchmark_results.json --viz viz 2>/dev/null | tee benchmark_output.md
 
       - name: Upload 3D visualizations
         uses: actions/upload-artifact@v4
@@ -98,8 +98,8 @@ jobs:
       - name: Run strategy benchmark
         id: strategy_bench
         run: |
-          python benchmark_strategies.py --limit 0 --output strategy_results.json --markdown-output strategy_output_full.md > /dev/null
-          python benchmark_strategies.py --limit 8 --markdown-output strategy_output.md 2>/dev/null | tee strategy_output.md
+          python -m scripts.benchmark_strategies --limit 0 --output strategy_results.json --markdown-output strategy_output_full.md > /dev/null
+          python -m scripts.benchmark_strategies --limit 8 --markdown-output strategy_output.md 2>/dev/null | tee strategy_output.md
 
       - name: Add benchmark to job summary
         run: |

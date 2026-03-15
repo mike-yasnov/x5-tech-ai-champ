@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from nicegui import ui
 
-from experiment_service import (
+from core.experiment_service import (
     DEFAULT_SCORE_WEIGHTS,
     SCORE_WEIGHT_KEYS,
     ExperimentService,
@@ -20,9 +20,9 @@ from experiment_service import (
     make_experiment_draft,
     make_task_id,
 )
-from scenario_catalog import BENCHMARK_SCENARIO_NAMES
+from core.scenario_catalog import BENCHMARK_SCENARIO_NAMES
 from base_solver.solver import STRATEGIES
-from visualize import generate_scenario_html
+from core.visualize import generate_scenario_html
 
 fastapi_app = FastAPI(
     title="X5 Packing Lab",

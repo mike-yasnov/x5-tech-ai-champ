@@ -8,8 +8,8 @@ import pytest
 # Ensure project root is on path for generator/validator imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from generator import generate_scenario
-from validator import evaluate_solution
+from core.generator import generate_scenario
+from core.validator import evaluate_solution
 from alternative_solver.models import Box as AltBox
 from alternative_solver.models import Pallet as AltPallet
 from alternative_solver.models import solution_to_dict as alt_solution_to_dict

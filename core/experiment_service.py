@@ -10,12 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from generator import generate_scenario
-from scenario_catalog import BENCHMARK_SCENARIOS, BENCHMARK_SCENARIO_NAMES
+from core.generator import generate_scenario
+from core.scenario_catalog import BENCHMARK_SCENARIOS, BENCHMARK_SCENARIO_NAMES
 from base_solver.models import Box, Pallet, solution_to_dict
 from base_solver.solver import STRATEGIES, solve
-from validator import evaluate_solution
-from visualize import build_scenario_viz_data
+from core.validator import evaluate_solution
+from core.visualize import build_scenario_viz_data
 
 DEFAULT_SCORE_WEIGHTS: Dict[str, float] = {
     "volume_utilization": 50.0,

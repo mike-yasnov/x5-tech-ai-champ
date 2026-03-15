@@ -1,8 +1,8 @@
 """3D pallet packing visualizer: generates interactive HTML with Three.js.
 
 Usage:
-    python visualize.py benchmark_viz.json -o viz/
-    python visualize.py benchmark_viz.json --single combined.html
+    python -m core.visualize benchmark_viz.json -o viz/
+    python -m core.visualize benchmark_viz.json --single combined.html
 
 Reads JSON with pallet + placement data per scenario and generates
 standalone HTML files with interactive 3D visualization.

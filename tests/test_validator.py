@@ -1,7 +1,7 @@
 """Tests for validator: hard constraints and soft metrics."""
 
 import pytest
-from validator import evaluate_solution
+from core.validator import evaluate_solution
 
 
 def _make_request(boxes, pallet=None):

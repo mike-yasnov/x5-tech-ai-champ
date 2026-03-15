@@ -542,13 +542,14 @@ Python 3.10+, стандартная библиотека (никаких вне
 
 ```bash
 # Решение одной задачи
-python -m solver.cli --input request.json --output response.json
+python -m base_solver request.json -o response.json
+python -m alternative_solver request.json -o response.json
 
 # Бенчмарк
-python benchmark.py
+python -m scripts.benchmark
 
 # Бенчмарк с визуализацией
-python benchmark.py --viz docs/viz/
+python -m scripts.benchmark --viz docs/viz/
 ```
 
 ### Ключевые параметры
