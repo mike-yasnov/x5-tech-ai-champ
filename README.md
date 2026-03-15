@@ -194,7 +194,57 @@ final_score = 0.50 × volume_utilization
 
 </details>
 
-## Baseline Benchmark (отправная точка)
+## Benchmark Results
+
+### Текущие результаты (2026-03-15)
+
+#### Сценарии организаторов
+
+| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
+|----------|-------|--------|----------|-----------|------------|--------|-----------|
+| heavy_water | **0.7434** | 0.7281 | 0.5978 | 1.0000 | 1.0000 | 107/179 | 727 |
+| fragile_tower | **0.7529** | 0.8294 | 0.4773 | 0.9500 | 1.0000 | 21/44 | 419 |
+| liquid_tetris | **0.6996** | 0.3992 | 1.0000 | 1.0000 | 1.0000 | 84/84 | 455 |
+| random_mixed | **0.7483** | 0.8570 | 0.5327 | 0.6000 | 1.0000 | 57/107 | 801 |
+| **Average** | **0.7360** | | | | | | |
+
+#### Расширенные реалистичные сценарии
+
+| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
+|----------|-------|--------|----------|-----------|------------|--------|-----------|
+| weight_limited_repeat | **0.7904** | 0.7617 | 0.6985 | 1.0000 | 1.0000 | 95/136 | 679 |
+| fragile_cap_mix | **0.7762** | 0.7002 | 0.7536 | 1.0000 | 1.0000 | 52/69 | 553 |
+| mixed_column_repeat | **0.9010** | 0.8019 | 1.0000 | 1.0000 | 1.0000 | 77/77 | 679 |
+| small_gap_fill | **0.7917** | 0.5833 | 1.0000 | 1.0000 | 1.0000 | 22/22 | 249 |
+| non_stackable_caps | **0.8750** | 0.7500 | 1.0000 | 1.0000 | 1.0000 | 18/18 | 186 |
+| **Average** | **0.8269** | | | | | | |
+
+#### Sanity и диагностические сценарии
+
+| Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
+|----------|-------|--------|----------|-----------|------------|--------|-----------|
+| exact_fit | **1.0000** | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 4/4 | 7 |
+| fragile_mix | **0.9864** | 1.0000 | 0.9545 | 1.0000 | 1.0000 | 21/22 | 191 |
+| support_tetris | **0.9571** | 1.0000 | 0.8571 | 1.0000 | 1.0000 | 12/14 | 77 |
+| cavity_fill | **0.7111** | 0.5556 | 0.7778 | 1.0000 | 1.0000 | 14/18 | 50 |
+| count_preference | **0.9000** | 1.0000 | 0.6667 | 1.0000 | 1.0000 | 2/3 | 4 |
+| **Average** | **0.9109** | | | | | | |
+
+**Overall average: 0.8309** | Constraint tests: **74/76 (97.4%)**
+
+> Solver v1.x, greedy + multi-restart (30+ стратегий) + LNS + postprocess, budget 900ms.
+
+### Прогресс от baseline
+
+| Scenario | Baseline | Текущий | Δ |
+|----------|----------|---------|---|
+| heavy_water | 0.7434 | 0.7434 | — |
+| fragile_tower | 0.6214 | **0.7529** | **+0.1315** |
+| liquid_tetris | 0.6846 | **0.6996** | **+0.0150** |
+| random_mixed | 0.7023 | **0.7483** | **+0.0460** |
+| **Organizer avg** | **0.6879** | **0.7360** | **+0.0481** |
+
+### Baseline (2026-03-14, отправная точка)
 
 | Scenario | Score | Volume | Coverage | Fragility | Time Score | Placed | Time (ms) |
 |----------|-------|--------|----------|-----------|------------|--------|-----------|
@@ -204,24 +254,43 @@ final_score = 0.50 × volume_utilization
 | random_mixed | **0.7023** | 0.8198 | 0.4579 | 0.5500 | 1.0000 | 49/107 | 112 |
 | **Average** | **0.6879** | | | | | | |
 
-> Дата: 2026-03-14. Solver v1.0.0, greedy + multi-restart (5 стратегий), budget 900ms.
+> Solver v1.0.0, greedy + multi-restart (5 стратегий), budget 900ms.
 
-## Архитектура baseline-солвера
+## Архитектура солвера
 
-**Extreme Points + Greedy + Multi-restart**
+**Extreme Points + Greedy + Multi-restart + LNS + Postprocess**
 
-1. **Extreme Points** — генерация кандидатных позиций (не полный перебор x,y,z)
+1. **Extreme Points** — генерация кандидатных позиций (cap=200, 5 EP per box + проекции)
 2. **Greedy packer** — для каждого короба выбирает лучшую позицию × ориентацию по scoring-функции
-3. **Multi-restart** — прогоняет 5 стратегий сортировки, выбирает лучший скор
+3. **Multi-restart** — 30+ стратегий (sort key × weight profile × packer type), adaptive stop
+4. **LNS** — destroy-repair post-processing с safe rebuild (валидация support)
+5. **Postprocess** — compact_downward → reorder_fragile → try_insert → second reorder_fragile → remove_and_refill → compact
 
-Стратегии сортировки: `volume_desc`, `weight_desc`, `base_area_desc`, `density_desc`, `constrained_first`
+### Стратегии сортировки
 
-## Направления улучшений
+`constrained_first`, `base_area_desc`, `fragile_last`, `volume_desc`, `volume_asc`, `density_desc`, `non_stackable_last`, `height_desc`, `weight_desc`, `max_dim_desc`, `heavy_base_fragile_top`, `stackable_base`, `score_per_kg`, `light_fillers_first`, `coverage_optimal`, `random_0..9`
 
-- [ ] Beam search вместо greedy (ширина луча = качество vs скорость)
-- [ ] Layer-based packing (укладка слоями)
-- [ ] LNS (Large Neighborhood Search) — локальный поиск с перестроением
-- [ ] Тюнинг весов scoring-функции
-- [ ] Больше стратегий сортировки для multi-restart
-- [ ] Учёт `stackable: false` в валидаторе
-- [ ] 3D-визуализация (plotly/matplotlib)
+### Weight profiles
+
+`default`, `contact_heavy`, `fill_heavy`, `layer_heavy`, `fragile_avoid`, `compact`, `wall_hugger`, `fragile_strict` (hard-block heavy-on-fragile)
+
+### Ключевые оптимизации (feature/rl-solver)
+
+- **Phase-aware insert ordering** — non-fragile stackable first для стабильной базы
+- **Safe LNS rebuild** — validate support с `can_place()`, orphans в repair pool
+- **Second reorder_fragile** после insert — fix violations от вставки
+- **Fragile-safe candidate tracking** — сравнение 0-violation альтернативы после postprocess
+- **Fill_heavy fragile strategies** в top-6 для достижения в 10-restart бюджете
+- **Hard-block в fragile_strict** — return -1.0 score для heavy-on-fragile
+- **Adaptive strategy head** — prepend weight-aware стратегий при weight_pressure > 1.3
+- **Weight-aware sort keys** — `score_per_kg`, `light_fillers_first`, `coverage_optimal`
+- **Layer packer** — EP greedy с layer z-level bonus
+
+## Ограничения по физике
+
+| Scenario | Лимитирующий фактор | Примечание |
+|----------|---------------------|------------|
+| heavy_water | Вес (170% лимита) | 107/179 items = 99.4% веса использовано |
+| fragile_tower | Объём (113% паллеты) + 50% fragile | 21/44 items |
+| liquid_tetris | Все items помещаются | vol_util=0.40 (мелкие предметы) |
+| random_mixed | Вес (115%) + Объём (120%) + 59% fragile | 57/107 items |
