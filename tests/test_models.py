@@ -6,7 +6,7 @@ import tempfile
 
 import pytest
 
-from solver.models import Box, Pallet, Placement, Solution, UnplacedItem, load_request, solution_to_dict
+from alternative_solver.models import Box, Pallet, Placement, Solution, UnplacedItem, load_request, solution_to_dict
 
 
 @pytest.fixture

@@ -1,8 +1,8 @@
 """Tests for solver.scoring."""
 
-from solver.models import Pallet
-from solver.pallet_state import PalletState
-from solver.scoring import score_placement
+from alternative_solver.models import Pallet
+from alternative_solver.pallet_state import PalletState
+from alternative_solver.scoring import score_placement
 
 
 def _make_state():
