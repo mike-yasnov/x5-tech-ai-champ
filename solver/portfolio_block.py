@@ -455,11 +455,12 @@ def solve_request(
         shortlist_size = 3
 
     raw_shortlist: List[Tuple[Tuple[float, float, float, float], PolicyRun]] = []
+    shortlist_preview_ms = int((time.perf_counter() - t0) * 1000)
     for candidate in ranked_runs[:shortlist_size]:
         raw_preview = _preview_validator_score(
             request=request,
             placements=candidate.placements,
-            solve_time_ms=max(int((time.perf_counter() - t0) * 1000), candidate.elapsed_ms),
+            solve_time_ms=max(shortlist_preview_ms, candidate.elapsed_ms),
         )
         raw_shortlist.append((raw_preview, candidate))
     raw_shortlist.sort(key=lambda item: (item[0][0], -item[1].elapsed_ms), reverse=True)
@@ -475,6 +476,8 @@ def solve_request(
         finalize_limit = 1
 
     best = raw_shortlist[0][1]
+    shortlist_start_ms = int((time.perf_counter() - t0) * 1000)
+    best_finalize_start_ms = shortlist_start_ms
     placements, leftover, final_state = _finalize_run(
         request=request,
         run=best,
@@ -483,10 +486,12 @@ def solve_request(
     )
 
     best_elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    best_finalize_ms = max(0, best_elapsed_ms - best_finalize_start_ms)
+    best_projected_ms = shortlist_start_ms + best_finalize_ms
     best_preview = _preview_validator_score(
         request=request,
         placements=placements,
-        solve_time_ms=best_elapsed_ms,
+        solve_time_ms=best_projected_ms,
     )
 
     for _, candidate in raw_shortlist[1:finalize_limit]:
@@ -495,6 +500,7 @@ def solve_request(
         if budget_left <= 25:
             break
 
+        candidate_finalize_start_ms = current_elapsed
         candidate_placements, candidate_leftover, candidate_state = _finalize_run(
             request=request,
             run=candidate,
@@ -502,17 +508,19 @@ def solve_request(
             candidate_gen=candidate_gen,
         )
         candidate_elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        candidate_finalize_ms = max(0, candidate_elapsed_ms - candidate_finalize_start_ms)
+        candidate_projected_ms = shortlist_start_ms + candidate_finalize_ms
         candidate_preview = _preview_validator_score(
             request=request,
             placements=candidate_placements,
-            solve_time_ms=candidate_elapsed_ms,
+            solve_time_ms=candidate_projected_ms,
         )
 
         if (
             candidate_preview[0] > best_preview[0] + 1e-6
             or (
                 abs(candidate_preview[0] - best_preview[0]) <= 1e-6
-                and candidate_elapsed_ms < best_elapsed_ms
+                and candidate_projected_ms < best_projected_ms
             )
         ):
             best = candidate
@@ -520,6 +528,7 @@ def solve_request(
             leftover = candidate_leftover
             final_state = candidate_state
             best_elapsed_ms = candidate_elapsed_ms
+            best_projected_ms = candidate_projected_ms
             best_preview = candidate_preview
 
     return _format_output(
