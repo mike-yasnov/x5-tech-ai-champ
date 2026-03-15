@@ -17,7 +17,7 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-# X5 Tech brand-aligned palette for 3D visualization on dark background
+# Brand-aligned palette for 3D visualization on dark background
 SKU_COLORS = [
     "#67DB3A", "#CBB7F6", "#EEDCA8", "#BFE8C6",  # Brand green, Lavender, Sand, Mint
     "#A8F36A", "#E8A0C8", "#8BD4E0", "#D7F4A8",  # Lime, Rose, Teal, Pale lime
@@ -491,7 +491,13 @@ for (let i = 0; i < bottomCount; i++) {{
   addBoard(bottomBoardL, boardH, pW, xPos, bottomY, pW / 2, woodMat);
 }}
 
+// Shift pallet so top surface aligns with y=0 (where boxes are placed)
+// No shift needed — pallet extends below y=0 which is correct
 scene.add(palletGroup);
+
+// Adjust ground and grid down to sit below pallet
+ground.position.y = bottomY - boardH / 2 - 0.001;
+grid.position.y = bottomY - boardH / 2;
 
 // Pallet height limit (wireframe) — offset up by pallet height so boxes sit on top
 const limitGeo = new THREE.BoxGeometry(PALLET.dx * S, PALLET.dy * S, PALLET.dz * S);

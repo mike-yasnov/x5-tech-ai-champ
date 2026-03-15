@@ -25,7 +25,7 @@ from solver.solver import STRATEGIES
 from visualize import generate_scenario_html
 
 fastapi_app = FastAPI(
-    title="X5 Packing Lab",
+    title="Packing Lab",
     description="Interactive pallet packing playground powered by FastAPI and NiceGUI.",
 )
 service = ExperimentService()
@@ -68,10 +68,10 @@ def visualization(experiment_id: str) -> HTMLResponse:
 
 ui.run_with(
     fastapi_app,
-    title="X5 Packing Lab",
+    title="Packing Lab",
     language="ru",
     dark=True,
-    storage_secret="x5-packing-lab",
+    storage_secret="packing-lab",
     show_welcome_message=False,
 )
 
@@ -84,7 +84,7 @@ APP_HEAD = """
 
 APP_CSS = """
 /* ═══════════════════════════════════════════════════════
-   X5 Tech Design System
+   Packing Lab Design System
    ═══════════════════════════════════════════════════════ */
 
 :root {
@@ -865,8 +865,8 @@ def index() -> None:
         "selected_id": initial["id"],
         "autorun": True,
         "history_query": "",
-        "left_open": False,
-        "right_open": False,
+        "left_open": True,
+        "right_open": True,
         "bottom_open": False,
         "loading": False,
     }
@@ -1140,6 +1140,13 @@ def index() -> None:
                         if "pallet" not in request_dict or "boxes" not in request_dict:
                             ui.notify("В request должны быть ключи pallet и boxes", color="negative")
                             return
+                        # Capture all widget values before closing dialog
+                        save_scenario = str(scenario_select.value or "custom")
+                        save_seed = int(seed_input.value or 0)
+                        save_strategy = str(strategy_select.value or "portfolio_block")
+                        save_time_budget = int(time_budget_input.value or 900)
+                        save_n_restarts = int(effort_input.value or 10)
+                        save_notes = str(notes_input.value or "")
                         dialog.close()
                         _set_loading(True)
                         await ui.run_javascript("void(0)")
@@ -1149,33 +1156,32 @@ def index() -> None:
                                     current_record()["id"],
                                     request_dict=request_dict,
                                     name=exp_name,
-                                    scenario_type=str(scenario_select.value or "custom"),
-                                    seed=int(seed_input.value or 0),
-                                    strategy=str(strategy_select.value or "portfolio_block"),
-                                    time_budget_ms=int(time_budget_input.value or 900),
-                                    n_restarts=int(effort_input.value or 10),
-                                    notes=str(notes_input.value or ""),
+                                    scenario_type=save_scenario,
+                                    seed=save_seed,
+                                    strategy=save_strategy,
+                                    time_budget_ms=save_time_budget,
+                                    n_restarts=save_n_restarts,
+                                    notes=save_notes,
                                     run_now=True,
                                 )
                                 state["selected_id"] = updated["id"]
                             else:
                                 created = service.create_experiment(
                                     name=exp_name,
-                                    scenario_type=str(scenario_select.value or "custom"),
-                                    seed=int(seed_input.value or 0),
+                                    scenario_type=save_scenario,
+                                    seed=save_seed,
                                     request_dict=request_dict,
-                                    strategy=str(strategy_select.value or "portfolio_block"),
-                                    time_budget_ms=int(time_budget_input.value or 900),
-                                    n_restarts=int(effort_input.value or 10),
+                                    strategy=save_strategy,
+                                    time_budget_ms=save_time_budget,
+                                    n_restarts=save_n_restarts,
                                     score_weights=current_record().get("score_weights", DEFAULT_SCORE_WEIGHTS),
-                                    notes=str(notes_input.value or ""),
+                                    notes=save_notes,
                                     run_now=True,
                                 )
                                 state["selected_id"] = created["id"]
                         finally:
                             state["loading"] = False
                             refresh_all()
-                        ui.notify("Эксперимент сохранен и запущен", color="positive")
 
                     with ui.row().classes("gap-3"):
                         ui.button("Отмена", on_click=dialog.close).classes("btn-secondary")
@@ -1237,7 +1243,6 @@ def index() -> None:
                         finally:
                             state["loading"] = False
                             refresh_all()
-                        ui.notify("Результат обновлен и пересчитан", color="positive")
 
                     ui.button(
                         "Сохранить результат",
@@ -1270,7 +1275,7 @@ def index() -> None:
         with ui.element("div").classes("app-header"):
             with ui.row().classes("items-center gap-3 no-wrap"):
                 ui.button(icon="menu", on_click=toggle_left).props("flat round dense").classes("btn-icon")
-                ui.html('<span class="logo-text">X5 <span class="logo-accent">Packing Lab</span></span>')
+                ui.html('<span class="logo-text"><span class="logo-accent">Packing</span> Lab</span>')
 
             @ui.refreshable
             def header_info() -> None:
@@ -1331,7 +1336,7 @@ def index() -> None:
         ))
 
         # ── LEFT SIDEBAR: History ───────────────────────
-        left_ref = ui.element("div").classes("sidebar-left collapsed")
+        left_ref = ui.element("div").classes("sidebar-left")
         with left_ref:
             @ui.refreshable
             def history_panel() -> None:
@@ -1486,7 +1491,7 @@ def index() -> None:
             visualization_panel()
 
         # ── RIGHT SIDEBAR: Controls ─────────────────────
-        right_ref = ui.element("div").classes("sidebar-right collapsed")
+        right_ref = ui.element("div").classes("sidebar-right")
         with right_ref:
             @ui.refreshable
             def control_panel() -> None:
@@ -1596,14 +1601,19 @@ def index() -> None:
 
             details_panel()
 
-    # Auto-expand sidebars on desktop at page load (they start collapsed for mobile-first)
-    async def _auto_expand_sidebars() -> None:
+    # Post-load: force Quasar components to recalculate dimensions + collapse sidebars on mobile
+    async def _post_load_init() -> None:
+        # Force resize so Quasar sliders initialize their track widths
+        await ui.run_javascript("window.dispatchEvent(new Event('resize'))")
+        # On mobile, collapse sidebars
         is_mobile = await ui.run_javascript("window.innerWidth <= 768")
-        if not is_mobile:
-            toggle_left()   # expand left
-            toggle_right()  # expand right
+        if is_mobile:
+            if state["left_open"]:
+                toggle_left()
+            if state["right_open"]:
+                toggle_right()
 
-    ui.timer(0.3, _auto_expand_sidebars, once=True)
+    ui.timer(0.5, _post_load_init, once=True)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
