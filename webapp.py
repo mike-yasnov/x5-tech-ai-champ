@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from typing import Any, Dict, Optional
@@ -9,7 +10,7 @@ from typing import Any, Dict, Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from nicegui import ui
+from nicegui import app, ui
 
 from experiment_service import (
     DEFAULT_SCORE_WEIGHTS,
@@ -855,13 +856,51 @@ def total_requested_items(record: Dict[str, Any]) -> int:
     return sum(int(box.get("quantity", 0)) for box in record.get("request", {}).get("boxes", []))
 
 
+class PersistentState:
+    """Dict-like state that persists designated keys in app.storage.browser."""
+
+    PERSISTENT_KEYS = {"selected_id", "autorun", "left_open", "right_open", "bottom_open"}
+    STORAGE_PREFIX = "packing_lab_"
+
+    def __init__(self, defaults: Dict[str, Any]) -> None:
+        self._transient: Dict[str, Any] = {}
+        self._defaults = defaults
+        self._browser = app.storage.browser
+        for key, default in defaults.items():
+            if key in self.PERSISTENT_KEYS:
+                if self.STORAGE_PREFIX + key not in self._browser:
+                    self._browser[self.STORAGE_PREFIX + key] = default
+            else:
+                self._transient[key] = default
+
+    def __getitem__(self, key: str) -> Any:
+        if key in self.PERSISTENT_KEYS:
+            storage_key = self.STORAGE_PREFIX + key
+            if storage_key in self._browser:
+                return self._browser[storage_key]
+            return self._defaults.get(key)
+        return self._transient[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if key in self.PERSISTENT_KEYS:
+            self._browser[self.STORAGE_PREFIX + key] = value
+        else:
+            self._transient[key] = value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
 @ui.page("/")
-def index() -> None:
+async def index() -> None:
     ui.add_head_html(APP_HEAD)
     ui.add_css(APP_CSS)
 
     initial = service.ensure_default_experiment()
-    state: Dict[str, Any] = {
+    state = PersistentState({
         "selected_id": initial["id"],
         "autorun": True,
         "history_query": "",
@@ -869,7 +908,15 @@ def index() -> None:
         "right_open": True,
         "bottom_open": False,
         "loading": False,
-    }
+    })
+
+    # Validate persisted selected_id -- experiment may have been deleted
+    persisted_id = state.get("selected_id")
+    if persisted_id:
+        try:
+            service.get_record(persisted_id)
+        except KeyError:
+            state["selected_id"] = initial["id"]
 
     # ── Refs for sidebar/bottom elements ──
     left_ref = None
@@ -909,7 +956,10 @@ def index() -> None:
 
     async def rerun_selected() -> None:
         _set_loading(True)
-        await ui.run_javascript("void(0)")  # yield to render
+        try:
+            await ui.run_javascript("void(0)")  # yield to render
+        except (TimeoutError, RuntimeError):
+            pass
         try:
             record = current_record()
             updated = service.run_experiment(record["id"])
@@ -924,7 +974,10 @@ def index() -> None:
         kwargs = {key: value, "run_now": bool(state["autorun"])}
         if state["autorun"]:
             _set_loading(True)
-            await ui.run_javascript("void(0)")
+            try:
+                await ui.run_javascript("void(0)")
+            except (TimeoutError, RuntimeError):
+                pass
         try:
             updated = service.update_metadata(record["id"], **kwargs)
             state["selected_id"] = updated["id"]
@@ -932,27 +985,46 @@ def index() -> None:
             state["loading"] = False
             refresh_all()
 
+    _weight_debounce_task: Optional[asyncio.Task] = None  # type: ignore[assignment]
+
     async def update_weight(key: str, value: float) -> None:
+        nonlocal _weight_debounce_task
         record = current_record()
         weights = clone_data(record.get("score_weights", DEFAULT_SCORE_WEIGHTS))
         weights[key] = float(value)
-        updated = service.update_score_weights(record["id"], weights)
-        if state["autorun"]:
-            _set_loading(True)
-            await ui.run_javascript("void(0)")
-            try:
-                updated = service.run_experiment(updated["id"])
-            finally:
-                state["loading"] = False
-        state["selected_id"] = updated["id"]
-        refresh_all()
+        service.update_score_weights(record["id"], weights)
+
+        # Cancel any pending debounced run
+        if _weight_debounce_task and not _weight_debounce_task.done():
+            _weight_debounce_task.cancel()
+
+        async def _debounced_run() -> None:
+            await asyncio.sleep(0.4)
+            rec = current_record()
+            if state["autorun"]:
+                _set_loading(True)
+                try:
+                    await ui.run_javascript("void(0)")
+                except (TimeoutError, RuntimeError):
+                    pass
+                try:
+                    updated = service.run_experiment(rec["id"])
+                    state["selected_id"] = updated["id"]
+                finally:
+                    state["loading"] = False
+            refresh_all()
+
+        _weight_debounce_task = asyncio.create_task(_debounced_run())
 
     async def reset_weights() -> None:
         record = current_record()
         updated = service.update_score_weights(record["id"], dict(DEFAULT_SCORE_WEIGHTS))
         if state["autorun"]:
             _set_loading(True)
-            await ui.run_javascript("void(0)")
+            try:
+                await ui.run_javascript("void(0)")
+            except (TimeoutError, RuntimeError):
+                pass
             try:
                 updated = service.run_experiment(updated["id"])
             finally:
@@ -1619,7 +1691,7 @@ def index() -> None:
 if __name__ in {"__main__", "__mp_main__"}:
     uvicorn.run(
         fastapi_app,
-        host=os.getenv("HOST", "127.0.0.1"),
+        host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "3030")),
         reload=False,
     )
