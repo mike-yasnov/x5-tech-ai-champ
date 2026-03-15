@@ -59,10 +59,29 @@ def run_benchmark(
     time_budget_ms: int = 5000,
     strategy: str = "portfolio_block",
     model_dir: str = "models",
+    warmup: bool = True,
 ) -> list:
     results = []
     if n_restarts is None:
         n_restarts = len(SORT_KEYS)
+
+    if warmup:
+        # Warm optional model imports and time-adaptive search branches before scoring.
+        for scenario_type, seed in ORGANIZER_SCENARIOS[:3]:
+            request_dict = generate_scenario(
+                f"warmup_{scenario_type}", scenario_type, seed=seed
+            )
+            task_id, pallet, boxes = _request_to_models(request_dict)
+            solve(
+                task_id=task_id,
+                pallet=pallet,
+                boxes=boxes,
+                request_dict=request_dict,
+                n_restarts=n_restarts,
+                time_budget_ms=time_budget_ms,
+                model_dir=model_dir,
+                strategy=strategy,
+            )
 
     for scenario_type, seed in BENCHMARK_SCENARIOS:
         request_dict = generate_scenario(
@@ -210,12 +229,18 @@ def main():
         default="models",
         help="Directory with optional selector or ranker artifacts",
     )
+    parser.add_argument(
+        "--no-warmup",
+        action="store_true",
+        help="Disable the unmeasured solver warmup pass before benchmarking",
+    )
     args = parser.parse_args()
 
     results = run_benchmark(
         n_restarts=args.restarts,
         strategy=args.strategy,
         model_dir=args.model_dir,
+        warmup=not args.no_warmup,
     )
     md = format_markdown(results)
     print(md)
