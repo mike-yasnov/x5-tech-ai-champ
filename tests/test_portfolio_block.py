@@ -387,6 +387,46 @@ def test_fragility_conflicts_ignore_heavy_fragile_boxes_on_fragile_support():
     assert _fragility_score_from_placements([bottom, top_non_fragile]) < 1.0
 
 
+def test_fragility_score_counts_cumulative_non_fragile_load():
+    bottom = PlacedBox(
+        sku_id="BOTTOM",
+        instance_index=0,
+        aabb=AABB(0, 0, 0, 400, 400, 200),
+        weight=1.0,
+        fragile=True,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+    middle_fragile = PlacedBox(
+        sku_id="MIDDLE-FRAGILE",
+        instance_index=0,
+        aabb=AABB(0, 0, 200, 400, 400, 400),
+        weight=1.0,
+        fragile=True,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+    top_non_fragile = PlacedBox(
+        sku_id="TOP-STURDY",
+        instance_index=0,
+        aabb=AABB(0, 0, 400, 400, 400, 600),
+        weight=3.0,
+        fragile=False,
+        stackable=True,
+        strict_upright=False,
+        rotation_code="LWH",
+        placed_dims=(400, 400, 200),
+    )
+
+    placements = [bottom, middle_fragile, top_non_fragile]
+    assert _fragility_score_from_placements(placements) == 0.9
+    assert len(_fragility_conflicts(placements)) == 2
+
+
 def test_strict_fragility_search_gates_on_near_fit_heavy_fragile_requests():
     fragile_mix_request = {
         "task_id": "strict-gate",

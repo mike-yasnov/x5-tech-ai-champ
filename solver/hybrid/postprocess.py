@@ -31,7 +31,7 @@ def _supported_safely(
             continue
         if not other.stackable:
             return False
-        if candidate.weight > FRAGILE_WEIGHT_THRESHOLD and other.fragile and not candidate.fragile:
+        if candidate.weight > FRAGILE_WEIGHT_THRESHOLD and other.fragile:
             return False
         support += overlap
     return support / base_area >= 0.6 - EPSILON
@@ -120,10 +120,7 @@ def fragile_reorder(
     pallet_width: int,
     max_height: int,
 ) -> List[PlacedBox]:
-    """Try to swap fragile boxes upward and heavy non-fragile boxes downward.
-
-    Goal: reduce fragility violations (heavy >2kg items resting directly on fragile items).
-    """
+    """Try to swap fragile boxes upward and heavy boxes downward."""
     result = list(placements)
     improved = True
     max_iterations = 50
@@ -142,23 +139,15 @@ def fragile_reorder(
             for j in range(i + 1, len(result)):
                 bi, bj = result[i], result[j]
 
-                # Only consider swaps where one is fragile and other is heavy
-                if bi.fragile == bj.fragile:
-                    continue
-                # Fragile should go up, heavy should go down
-                fragile_box = bi if bi.fragile else bj
-                heavy_box = bj if bi.fragile else bi
+                lower_box = bi if bi.aabb.z_min <= bj.aabb.z_min else bj
+                upper_box = bj if bi.aabb.z_min <= bj.aabb.z_min else bi
 
-                if heavy_box.weight <= FRAGILE_WEIGHT_THRESHOLD:
-                    continue
-
-                # Only swap if fragile is currently below heavy
-                if fragile_box.aabb.z_min >= heavy_box.aabb.z_min:
+                if not lower_box.fragile or upper_box.weight <= FRAGILE_WEIGHT_THRESHOLD:
                     continue
 
                 # Check if they have the same footprint dimensions (can swap positions)
-                fi = (fragile_box.aabb.length_x(), fragile_box.aabb.width_y())
-                fj = (heavy_box.aabb.length_x(), heavy_box.aabb.width_y())
+                fi = (lower_box.aabb.length_x(), lower_box.aabb.width_y())
+                fj = (upper_box.aabb.length_x(), upper_box.aabb.width_y())
                 if fi != fj:
                     continue
 
@@ -176,19 +165,32 @@ def fragile_reorder(
     return result
 
 
+def _direct_support_graph(placements: List[PlacedBox]) -> dict[int, list[int]]:
+    graph: dict[int, list[int]] = {idx: [] for idx in range(len(placements))}
+    for lower_idx, lower in enumerate(placements):
+        for upper_idx, upper in enumerate(placements):
+            if lower_idx == upper_idx:
+                continue
+            if abs(lower.aabb.z_max - upper.aabb.z_min) >= EPSILON:
+                continue
+            if lower.aabb.overlap_area_xy(upper.aabb) <= 0:
+                continue
+            graph[lower_idx].append(upper_idx)
+    return graph
+
+
 def _count_fragility_violations(placements: List[PlacedBox]) -> int:
     count = 0
-    for top in placements:
-        if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
+    for bottom in placements:
+        if not bottom.fragile:
             continue
-        if top.fragile:
-            continue
-        for bottom in placements:
-            if not bottom.fragile:
+        for top in placements:
+            if top.weight <= FRAGILE_WEIGHT_THRESHOLD:
                 continue
-            if abs(top.aabb.z_min - bottom.aabb.z_max) < EPSILON:
-                if top.aabb.overlap_area_xy(bottom.aabb) > 0:
-                    count += 1
+            if abs(top.aabb.z_min - bottom.aabb.z_max) >= EPSILON:
+                continue
+            if top.aabb.overlap_area_xy(bottom.aabb) > 0:
+                count += 1
     return count
 
 

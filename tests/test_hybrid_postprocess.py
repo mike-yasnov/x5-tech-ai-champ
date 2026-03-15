@@ -114,6 +114,14 @@ class TestCountFragilityViolations:
         ]
         assert _count_fragility_violations(placements) == 2
 
+    def test_cumulative_load_through_fragile_chain(self):
+        placements = [
+            _placed_box("FRAG1", AABB(0, 0, 0, 400, 400, 200), 1.0, fragile=True),
+            _placed_box("FRAG2", AABB(0, 0, 200, 400, 400, 400), 1.0, fragile=True),
+            _placed_box("HEAVY", AABB(0, 0, 400, 400, 400, 600), 3.0, fragile=False),
+        ]
+        assert _count_fragility_violations(placements) == 2
+
     def test_no_contact_no_violation(self):
         """Heavy non-fragile above fragile but not touching — no violation."""
         placements = [

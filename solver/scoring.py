@@ -44,7 +44,7 @@ def score_placement(
 
     # 3. Fragility penalty: check if we're placing heavy box on fragile ones
     fragility_score = 1.0
-    if weight_kg > 2.0 and z > 0 and not fragile:
+    if weight_kg > 2.0 and z > 0:
         fragile_below = state.get_fragile_boxes_at_top(z, x, y, x2, y2)
         if fragile_below:
             if strict_fragility:
